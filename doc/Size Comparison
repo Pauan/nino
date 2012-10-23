@@ -117,7 +117,7 @@ CoffeeScript (21 lines):
         else
           doit()
 
-Nino compact (19 lines):
+Nino compact (18 lines):
 
   (chrome.windows.getAll [ "populate" true ] -> a
     (readWriteDB o "tabs" -> o
