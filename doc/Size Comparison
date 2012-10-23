@@ -118,18 +118,6 @@ CoffeeScript (21 lines):
           doit()
 
 Nino compact (19 lines):
-  a |+| 1
-  a |-| 1
-  a |^| 2
-
-  a & b
-  a ^ b
-
-  a <> b
-
-  a >< b
-
-  a ^ (b & c)
 
   (chrome.windows.getAll [ "populate" true ] -> a
     (readWriteDB o "tabs" -> o
