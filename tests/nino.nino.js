@@ -218,3 +218,18 @@
     @number 2
     @number 3
   [1, 2, 3]
+
+@>>>
+  @array
+    @name mac
+    @name foo
+    @array
+      @name bar
+      @name qux
+    @array
+      @name +
+      @name foo
+      @name bar
+  > NINO.macros["foo"] = function (bar, qux) {
+      return foo + bar
+    }

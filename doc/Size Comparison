@@ -1,0 +1,151 @@
+JavaScript (32 lines):
+
+  chrome.windows.getAll({ populate: true }, function (a) {
+    readWriteDB(o, "tabs", function (o) {
+      function doit() {
+        var i = 0;
+        each(a, function (w) {
+          if (w.type === "normal") {
+            each(w.tabs, function (t) {
+              t.index = i++;
+              var s = urlToId(t.url);
+              if (!ignoreId[s]) {
+                o.put(addChromeTab(s, t));
+              }
+            });
+            winIds[w.id] = true;
+          }
+        });
+        if (--iInit === 0) {
+          init();
+        }
+      }
+      o.openCursor().onsuccess = function (e) {
+        var cursor = e.target.result;
+        if (cursor) {
+          var t = cursor.value;
+          tabs[t.id] = diskToTab(t);
+          cursor.continue();
+        } else {
+          doit();
+        }
+      };
+    });
+  });
+
+Ruby (29 lines):
+
+  chrome.windows.getAll { populate: true } do |a|
+    readWriteDB o, "tabs" do |o|
+      def doit
+        i = 0
+        if w.type == "normal"
+          w.tabs.each do |t|
+            t.index = ++i
+            s = urlToId t.url
+            if !ignoreId[s]
+              o.put addChromeTab s, t
+            end
+          end
+        end
+      end
+      if --iInit == 0
+        init()
+      end
+      o.openCursor().onsuccess = lambda do |e|
+        cursor = e.target.result
+        if cursor
+          t = cursor.value
+          tabs[t.id] = diskToTab t
+          cursor.continue()
+        else
+          doit()
+        end
+      end
+    end
+  end
+
+Nino full (25 lines):
+
+  ((get (get chrome (string windows)) (string getAll))
+   (dict (string populate) true)
+   (fn (array a)
+     (readWriteDB o (string tabs)
+       (fn (array o)
+         (do (def doit
+               (fn (array)
+                 (do (var (is i (number 0)))
+                     (if (is (get w (string type)) (string normal))
+                       (each (get w (string tabs))
+                         (fn (array t)
+                           (do (set! (get t (string index)) (add! i (number 1)))
+                               (let (is s (urlToId (get t (string url)))))
+                               (if (not (get ignoreId s))
+                                 ((get o (string put)) (addChromeTab s t))))))))))
+             (if (is (sub! iInit (number 1)) (number 0))
+               (init))
+             (set! (get ((get o (string openCursor))) (string onsuccess))
+               (fn (array e)
+                 (do (let (is cursor (get (get e (string target)) (string result))))
+                     (if cursor
+                       (do (let (is t (get cursor (string value))))
+                           (set! (get tabs (get t (string id))) (diskToTab t))
+                           ((get cursor (string continue))))
+                       (doit))))))))))
+
+CoffeeScript (21 lines):
+
+  chrome.windows.getAll { populate: true }, (a) ->
+    readWriteDB o, "tabs", (o) ->
+      doit = ->
+        i = 0
+        if w.type is "normal"
+          for t in w.tabs
+            t.index = ++i
+            s = urlToId t.url
+            if !ignoreId[s]
+              o.put addChromeTab s, t
+          null
+      if --iInit is 0
+        init()
+      o.openCursor().onsuccess = (e) ->
+        cursor = e.target.result
+        if cursor
+          t = cursor.value
+          tabs[t.id] = diskToTab t
+          cursor.continue()
+        else
+          doit()
+
+Nino compact (19 lines):
+  a |+| 1
+  a |-| 1
+  a |^| 2
+
+  a & b
+  a ^ b
+
+  a <> b
+
+  a >< b
+
+  a ^ (b & c)
+
+  (chrome.windows.getAll [ "populate" true ] -> a
+    (readWriteDB o "tabs" -> o
+      def doit ->
+        var i = 0
+        if w.type = "normal"
+          (each w.tabs -> t
+            t.index || ++i
+            let s = (urlToId t.url)
+            if ~ignoreId[s]
+              (o.put (addChromeTab s t)))
+      if --iInit = 0
+        (init)
+      (o.openCursor).onsuccess || -> e
+        if (let cursor = e.target.result)
+          \ let t = cursor.value
+            tabs[t.id] || (diskToTab t)
+            (cursor.continue)
+          (doit)))

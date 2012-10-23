@@ -213,12 +213,12 @@ var exports, NINO = (function (n) {
   }
   forms["."] = function (x, y) {
     return withPrecedence(85, function () {
-             if (Array.isArray(x) && x[0] === "number" && /^\d+$/.test(x[1])) {
-               return compile(x) + "."
-             } else {
-               return compileStatement(x)
-             }
-           }) + "." + y
+      if (Array.isArray(x) && x[0] === "number" && /^\d+$/.test(x[1])) {
+        return compile(x) + "."
+      } else {
+        return compileStatement(x)
+      }
+    }) + "." + y
   }
   forms["[]"] = function (x, y) {
     return withPrecedence(85, function () {

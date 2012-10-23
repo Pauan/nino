@@ -45,6 +45,13 @@ var exports, NINO = (function (n) {
     }
   }
 
+  function updater(s) {
+    return function (x, y) {
+      x = macex(x)
+      return ["=", x, [s, x, macex(y)]]
+    }
+  }
+
   function isMacro(x) {
     if (typeof x === "function") {
       return x
@@ -171,15 +178,8 @@ var exports, NINO = (function (n) {
     "set!": function (x, y) {
       return ["=", macex(x), macex(y)]
     },
-    // TODO: code duplication with sub!
-    "add!": function (x, y) {
-      x = macex(x)
-      return ["=", x, ["+", x, macex(y)]]
-    },
-    "sub!": function (x, y) {
-      x = macex(x)
-      return ["=", x, ["-", x, macex(y)]]
-    },
+    "add!": updater("+"),
+    "sub!": updater("-"),
     "+":    reducer("+"),
     "-":    reducer("-"),
     "*":    reducer("*"),
@@ -208,6 +208,17 @@ var exports, NINO = (function (n) {
         r.push([n.macros["is"], x, y])
       })
       return macex(r)
+    },
+    "mac": function (x, a, b) {
+      var f = macex([n.macros["fn"], a, b])
+      console.log(f[2], f[3])
+      n.macros[x] = new Function(f[2], f[3])
+      /*console.log(macex([n.macros["set!"],
+                          [n.macros["get"],
+                            [n.macros["get"], "NINO", new n.String("macros")],
+                            new n.String(x)],
+                          ]))*/
+      return undef
     }
   }
 

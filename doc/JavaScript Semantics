@@ -1,0 +1,14 @@
+In ECMAScript 5, it is now legal to call Function.prototype.apply with an
+array-like object:
+
+  function foo() { return [].slice.apply(arguments) }
+
+  foo.apply(null, { 0: "a", 1: "b", length: 2 })
+
+But it's still not valid to call it with a string:
+
+  foo.apply(null, "ab")
+
+However, it *is* valid if you coerce the string to a proper object:
+
+  foo.apply(null, new String("ab"))
