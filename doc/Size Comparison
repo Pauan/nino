@@ -121,19 +121,19 @@ Nino compact (19 lines):
 
   (chrome.windows.getAll [ "populate" true ] -> a
     (readWriteDB o "tabs" -> o
-      def doit ->
-        var i = 0
-        if w.type = "normal"
+      (def doit ->
+        (var i = 0)
+        (if w.type = "normal"
           (each w.tabs -> t
             t.index || ++i
-            let s = (urlToId t.url)
-            if ~ignoreId[s]
-              (o.put (addChromeTab s t)))
-      if --iInit = 0
-        (init)
+            (let s = (urlToId t.url))
+            (if ~ignoreId[s]
+              (o.put (addChromeTab s t))))))
+      (if --iInit = 0
+        (init))
       (o.openCursor).onsuccess || -> e
-        if (let cursor = e.target.result)
-          \ let t = cursor.value
-            tabs[t.id] || (diskToTab t)
-            (cursor.continue)
-          (doit)))
+        (if (let cursor = e.target.result)
+          (do (let t = cursor.value)
+              tabs[t.id] || (diskToTab t)
+              (cursor.continue))
+          (doit))))
