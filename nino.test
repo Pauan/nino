@@ -1,0 +1,82 @@
+#! /usr/bin/env node
+"use strict";
+
+var fs        = require("fs")
+  , parse     = require("./lib/nuit.parse").parse
+  , serialize = require("./lib/nuit.serialize").serialize
+
+// http://wiki.ecmascript.org/doku.php?id=harmony:egal
+function is(x, y) {
+  if (x === y) {
+    // 0 === -0, but they are not identical
+    return x !== 0 || 1 / x === 1 / y
+  }
+
+  // NaN !== NaN, but they are identical.
+  // NaNs are the only non-reflexive value, i.e., if x !== x,
+  // then x is a NaN.
+  // isNaN is broken: it converts its argument to number, so
+  // isNaN("foo") => true
+  return x !== x && y !== y
+}
+
+function iso(x, y) {
+  if (is(x, y)) {
+    return true
+  } else if (x instanceof Object && y instanceof Object &&
+             is(Object.getPrototypeOf(x), Object.getPrototypeOf(y))) {
+    var aX = Object.keys(x)
+      , aY = Object.keys(y)
+    if (aX.length === aY.length) {
+      return aX.every(function (s) {
+        if (s in y && iso(x[s],  y[s])) {
+          return true
+        }
+      })
+    } else {
+      return false
+    }
+  } else {
+    return false
+  }
+}
+
+function test(sFile, f, fAfter) {
+  fs.readFile(__dirname + "/tests/" + sFile, "utf8", function (err, s) {
+    if (err) throw err
+    parse(s).forEach(function (a) {
+      var l = f(a[0], a[1])
+        , r = a[2]
+      if (!iso(l, r)) {
+        console.error(serialize(["file", sFile,
+                                  ["expected", r],
+                                  ["got", l]]))
+        /*console.error("@file " + sFile +
+                      "\n  @expected\n    " + r +
+                      "\n  @got\n    " + l + "\n")*/
+      }
+      fAfter && fAfter(l)
+    })
+  })
+}
+
+
+var compile = require("./compiler/nino.compile.js").compile
+test("nino.compile.js", function (s, l) {
+  return compile([l])
+}/*, function (x) {
+  return eval(x)
+}*/)
+
+
+var nino     = require("./language/nino.nino.js").nino
+  , optimize = require("./compiler/nino.optimize.js").optimize
+test("nino.nino.js", function (s, l) {
+  //if (s === ">>>") {
+    return compile(nino([l]))
+  /*} else if (s === ">>>+o") {
+    return compile(optimize(nino([l])))
+  }*/
+}/*, function (x) {
+  return eval(x)
+}*/)
