@@ -73,6 +73,8 @@ var exports, NINO = (function (n) {
       return ["string", a.value]
     } else if (a instanceof n.Number) {
       return ["number", a.value]
+    } else if (a instanceof n.Boolean) {
+      return ["boolean", a.value]
     } else {
       return ["name", a]
     }
@@ -80,10 +82,11 @@ var exports, NINO = (function (n) {
 
   function transform(x) {
     switch (x[0]) {
-    case "array":  return x.slice(1).map(transform)
-    case "name":   return x[1]
-    case "string": return new n.String(x[1])
-    case "number": return new n.Number(x[1])
+    case "array":   return x.slice(1).map(transform)
+    case "name":    return x[1]
+    case "string":  return new n.String(x[1])
+    case "number":  return new n.Number(x[1])
+    case "boolean": return new n.Boolean(x[1])
     }
   }
 
@@ -91,6 +94,9 @@ var exports, NINO = (function (n) {
     this.value = x
   }
   n.Number = function (x) {
+    this.value = x
+  }
+  n.Boolean = function (x) {
     this.value = x
   }
 /*

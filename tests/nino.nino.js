@@ -233,3 +233,58 @@
   > NINO.macros["foo"] = function (bar, qux) {
       return foo + bar
     }
+
+@>>>
+  @array
+    @array
+      @name get
+      @array
+        @name get
+        @name chrome
+        @string windows
+      @string getAll
+    @array
+      @name dict
+      @string populate
+      @boolean true
+    @array
+      @name fn
+      @array
+        @name a
+      @array
+        @name readWriteDB
+        @name o
+        @string tabs
+        @array
+          @name fn
+          @array
+            @name o
+          @array
+            @name do
+            @
+
+    ((get (get chrome (string windows)) (string getAll))
+   (dict (string populate) true)
+   (fn (array a)
+     (readWriteDB o (string tabs)
+       (fn (array o)
+         (do (def doit
+               (fn (array)
+                 (do (var (is i (number 0)))
+                     (if (is (get w (string type)) (string normal))
+                       (each (get w (string tabs))
+                         (fn (array t)
+                           (do (set! (get t (string index)) (add! i (number 1)))
+                               (let (is s (urlToId (get t (string url)))))
+                               (if (not (get ignoreId s))
+                                 ((get o (string put)) (addChromeTab s t))))))))))
+             (if (is (sub! iInit (number 1)) (number 0))
+               (init))
+             (set! (get ((get o (string openCursor))) (string onsuccess))
+               (fn (array e)
+                 (do (let (is cursor (get (get e (string target)) (string result))))
+                     (if cursor
+                       (do (let (is t (get cursor (string value))))
+                           (set! (get tabs (get t (string id))) (diskToTab t))
+                           ((get cursor (string continue))))
+                       (doit))))))))))
