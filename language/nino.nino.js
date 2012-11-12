@@ -141,26 +141,30 @@ var exports, NINO = (function (n) {
       case 0:
         return undef
       case 1:
-        return macex(a[0])
+        return ["==", macex(a[0]), ["null"]]
       case 2:
-        return ["if", macex(a[0]),
+        return ["if", ["==", macex(a[0]), ["null"]],
                  [macex(a[1])],
                  []]
       case 3:
-        return ["if", macex(a[0]),
+        return ["if", ["==", macex(a[0]), ["null"]],
                  [macex(a[1])],
                  [macex(a[2])]]
       default:
-        return ["if", macex(a[0]),
+        return ["if", ["==", macex(a[0]), ["null"]],
                  [macex(a[1])],
                  [anon.apply(null, [].slice.call(arguments, 2))]]
       }
+    },
+    "has": function (x, y) {
+      return ["in", macex(y), macex(x)]
     },
     "get": function (x, y, z) {
       if (z == null) {
         return ["[]", macex(x), macex(y)]
       } else {
-        return ["||", ["[]", macex(x), macex(y)], macex(z)]
+        return macex([n.macros["or"], [n.macros["get"], x, y], z])
+        //return ["||", ["[]", macex(x), macex(y)], macex(z)]
       }
     },
     "var": function () {
@@ -184,31 +188,81 @@ var exports, NINO = (function (n) {
     "set!": function (x, y) {
       return ["=", macex(x), macex(y)]
     },
+    "do": function () {
+      var b = [].map.call(arguments, macex)
+      if (b.length) {
+        b[b.length - 1] = ["return", b[b.length - 1]]
+      }
+      return ["call", ["function", "", [], b], []]
+      /*return macex([].reduceRight.call(arguments, function (x, y) {
+        return [[n.macros["fn"], [], x], y]
+      }))*/
+    },
     "add!": updater("+"),
     "sub!": updater("-"),
-    "+":    reducer("+"),
-    "-":    reducer("-"),
-    "*":    reducer("*"),
-    "/":    reducer("/"),
+    "add":  reducer("+"),
+    "sub":  reducer("-"),
+    "mul":  reducer("*"),
+    "div":  reducer("/"),
     "mod":  binary("%"),
-    "and":  reducer("&&"),
-    "or":   reducer("||"),
-    "<":    bin_reducer("<",   "&&"),
-    ">":    bin_reducer(">",   "&&"),
+    //"and":  reducer("&&"),
+    //"or":   reducer("||"),
+    "lt":   bin_reducer("<",   "&&"),
+    "gt":   bin_reducer(">",   "&&"),
+    "lte":  bin_reducer("<=",   "&&"),
+    "gte":  bin_reducer(">=",   "&&"),
     "is":   bin_reducer("===", "&&"),
     "isnt": bin_reducer("!==", "&&"),
     "not":  unary("!"),
 
     // Macros
+    "and": function () {
+      switch (arguments.length) {
+      case 0:
+        return ["boolean", "true"]
+      case 1:
+        return macex(arguments[0])
+      default:
+        return macex([].reduceRight.call(arguments, function (x, y) {
+          var u = n.uniq()
+          return [n.macros["let"], u, y, [n.macros["if"], u, u, x]]
+        }))
+      }
+    },
+    "or": function () {
+      switch (arguments.length) {
+      case 0:
+        return undef
+      case 1:
+        return macex(arguments[0])
+      default:
+        return macex([].reduceRight.call(arguments, function (x, y) {
+          var u = n.uniq()
+          return [n.macros["let"], u, y, [n.macros["if"], u, x, u]]
+        }))
+      }
+    },
     "let": function (v, e, b) {
+      // ((fn (v) b) e)
       return macex([[n.macros["fn"], [v], b], e])
     },
-    "do": function () {
-      return macex([].reduceRight.call(arguments, function (x, y) {
-        return [[n.macros["fn"], [], x], y]
-      }))
+    "if-do": function (x) {
+      // (if x (do ...))
+      var b = [n.macros["do"]].concat([].slice.call(arguments, 1))
+      return macex([n.macros["if"], x, b])
+    },
+    "let-do": function (v, e) {
+      // (let v e (do ...))
+      var b = [n.macros["do"]].concat([].slice.call(arguments, 2))
+      return macex([n.macros["let"], v, e, b])
+    },
+    "var-do": function (v, e) {
+      // (do (var v e) ...)
+      var b = [].slice.call(arguments, 2)
+      return macex([n.macros["do"], [n.macros["var"], v, e]].concat(b))
     },
     "or-is": function (x) {
+      // (or (is x y) (is x z))
       var r = [n.macros["or"]]
       ;[].slice.call(arguments, 1).forEach(function (y) {
         r.push([n.macros["is"], x, y])
@@ -216,9 +270,9 @@ var exports, NINO = (function (n) {
       return macex(r)
     },
     "mac": function (x, a, b) {
-      var f = macex([n.macros["fn"], a, b])
+      /*var f = macex([n.macros["fn"], a, b])
       console.log(f[2], f[3])
-      n.macros[x] = new Function(f[2], f[3])
+      n.macros[x] = new Function(f[2], f[3])*/
       /*console.log(macex([n.macros["set!"],
                           [n.macros["get"],
                             [n.macros["get"], "NINO", new n.String("macros")],

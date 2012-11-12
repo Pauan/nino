@@ -1,20 +1,23 @@
 @>>>
   @array
     @name do
+  (function () {})()
+
+@>>>
+  @array
+    @name do
     @number 1
     @number 2
     @number 3
     @number 4
     @number 5
   > (function () {
-      return function () {
-        return function () {
-          return function () {
-            return 5
-          }(4)
-        }(3)
-      }(2)
-    })(1)
+      1;
+      2;
+      3;
+      4;
+      return 5
+    })()
 
 @>>>
   @array
@@ -234,57 +237,141 @@
       return foo + bar
     }
 
+@>>>+o
+  @array
+    @name or
+    @number 1
+    @number 2
+  > 1
+
+@>>>+o
+  @array
+    @name or
+    @number 1
+    @number 2
+    @number 3
+  > 1
+
+@>>>+o
+  @array
+    @name or
+    @number 1
+    @number 2
+    @number 3
+    @number 4
+  > 1
+
 @>>>
   @array
-    @array
-      @name get
-      @array
-        @name get
-        @name chrome
-        @string windows
-      @string getAll
-    @array
-      @name dict
-      @string populate
-      @boolean true
-    @array
-      @name fn
-      @array
-        @name a
-      @array
-        @name readWriteDB
-        @name o
-        @string tabs
-        @array
-          @name fn
-          @array
-            @name o
-          @array
-            @name do
-            @
+    @name or
+  void 0
 
-    ((get (get chrome (string windows)) (string getAll))
-   (dict (string populate) true)
-   (fn (array a)
-     (readWriteDB o (string tabs)
-       (fn (array o)
-         (do (def doit
-               (fn (array)
-                 (do (var (is i (number 0)))
-                     (if (is (get w (string type)) (string normal))
-                       (each (get w (string tabs))
-                         (fn (array t)
-                           (do (set! (get t (string index)) (add! i (number 1)))
-                               (let (is s (urlToId (get t (string url)))))
-                               (if (not (get ignoreId s))
-                                 ((get o (string put)) (addChromeTab s t))))))))))
-             (if (is (sub! iInit (number 1)) (number 0))
-               (init))
-             (set! (get ((get o (string openCursor))) (string onsuccess))
-               (fn (array e)
-                 (do (let (is cursor (get (get e (string target)) (string result))))
-                     (if cursor
-                       (do (let (is t (get cursor (string value))))
-                           (set! (get tabs (get t (string id))) (diskToTab t))
-                           ((get cursor (string continue))))
-                       (doit))))))))))
+@>>>
+  @array
+    @name or
+    @number 1
+  1
+
+@>>>
+  @array
+    @name or
+    @number 1
+    @number 2
+  > (function (a) {
+      if (a == null) return 2; else return a
+    })(1)
+
+@>>>
+  @array
+    @name or
+    @number 1
+    @number 2
+    @number 3
+  > (function (a) {
+      if (a == null) return (function (a) {
+        if (a == null) return 3; else return a
+      })(2); else return a
+    })(1)
+
+@>>>
+  @array
+    @name or
+    @number 1
+    @number 2
+    @number 3
+    @number 4
+  > (function (a) {
+      if (a == null) return (function (a) {
+        if (a == null) return (function (a) {
+          if (a == null) return 4; else return a
+        })(3); else return a
+      })(2); else return a
+    })(1)
+
+@>>>
+  @array
+    @name and
+  true
+
+@>>>
+  @array
+    @name and
+    @number 1
+  1
+
+@>>>
+  @array
+    @name and
+    @number 1
+    @number 2
+  > (function (a) {
+      if (a == null) return a; else return 2
+    })(1)
+
+@>>>
+  @array
+    @name and
+    @number 1
+    @number 2
+    @number 3
+  > (function (a) {
+      if (a == null) return a; else return function (a) {
+        if (a == null) return a; else return 3
+      }(2)
+    })(1)
+
+@>>>
+  @array
+    @name and
+    @number 1
+    @number 2
+    @number 3
+    @number 4
+  > (function (a) {
+      if (a == null) return a; else return function (a) {
+        if (a == null) return a; else return function (a) {
+          if (a == null) return a; else return 4
+        }(3)
+      }(2)
+    })(1)
+
+@>>>
+  @array
+    @name has
+    @name foo
+    @string bar
+  > "bar" in foo
+
+@>>>
+  @array
+    @name var-do
+    @name foo
+    @number 1
+    @array
+      @name add
+      @name foo
+      @number 2
+  > (function () {
+      var foo = 1;
+      return foo + 2
+    })()
