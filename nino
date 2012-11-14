@@ -1,0 +1,29 @@
+#! /usr/bin/env racket
+#lang racket/base
+
+(require (file "01 nino.rkt"))
+(require racket/cmdline)
+
+(define all   (make-parameter #f))
+(define debug (make-parameter #f))
+(define repl  (make-parameter #f))
+
+;(nu-eval-file "02 nino.ni")
+
+(command-line
+  #:program "Nino"
+  #:once-each
+  [("-e" "--eval" ) s "Evaluates the string and prints the result"
+    (displayln (nu-eval-string s))]
+  [("-a" "--all"  )   "Execute every file rather than only the first"         (all #t)]
+  [("-d" "--debug")   "Turns debug mode on, causing extra messages to appear" (debug #t)]
+  [("-i" "--repl" )   "Always execute the repl"                               (repl #t)]
+  #:args args
+  (unless (null? args)
+    (if (all)
+        (map nu-eval-file args)
+        (parameterize ((current-command-line-arguments (list->vector (cdr args))))
+          (nu-eval-file (car args)))))
+  (when (or (null? args) (repl))
+    (nu-repl))
+  (void))
