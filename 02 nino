@@ -1,0 +1,6 @@
+(var mac (dict %macex (fn (list name args body)
+  (&compile (list var name (list dict %macex (list fn args (list &compile body))))))))
+
+(mac def (list name args body)
+  (list do (list var name)
+           (list set! name (list fn args body))))

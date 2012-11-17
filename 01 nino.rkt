@@ -1,7 +1,10 @@
 #lang racket/base
 
+;; TODO: unsafe versions of math fl stuff
+
 (provide (all-defined-out))
 
+(require racket/flonum)
 (require (except-in racket/unsafe/ops
                     unsafe-unbox*
                     unsafe-set-box*!
@@ -38,6 +41,7 @@
           ; need to use eqv? for characters
           (eqv? x y))))
 
+; TODO: can probably use unsafe-car and unsafe-cdr
 (define (hash-remove* x . a)
   (let loop ((x  x)
              (a  a))
@@ -45,6 +49,43 @@
         x
         (loop (hash-remove x (car a))
               (cdr a)))))
+
+(define (print x f)
+  (cond ((box? x)
+          (display "#<box")
+          (let ((x (unsafe-unbox* x)))
+            (when x
+              (display " ")
+              (print x f)))
+          (display ">"))
+        ((pair? x)
+          (display "(")
+          (let loop ((x x))
+            (if (pair? x)
+                (begin (print (unsafe-car x) f)
+                       (when (pair? (unsafe-cdr x))
+                         (display " "))
+                       (loop (unsafe-cdr x)))
+                (display ")"))))
+        ((integer? x)
+          (f (inexact->exact x)) ; TODO: fl->exact-integer
+          )
+        (else
+          (f x)
+          #|(let ((n (object-name x)))
+            (if n
+                (f n)
+                (f x)))|#
+          )))
+
+(define (evalable? x)
+  (symbol? x))
+
+(define (pattern-car expected)
+  (lambda (x)
+    (if (pair? x)
+        (unsafe-car x)
+        (error (format "invalid pattern: expected ~s but got" expected) x))))
 
 
 (define env     (make-parameter (hash)))
@@ -58,21 +99,59 @@
   (b (apply hash-set* (b) args)))
 
 
+; (depends print)
+; TODO: rewrite to use unsafe-car
+(define (pr . args)
+  (let loop ((x args))
+    (when (pair? x)
+      (print (unsafe-car x) display)
+      (loop (unsafe-cdr x))))
+  (car args))
+
+; (depends pr)
+; TODO: rewrite to use unsafe-car
+(define (prn . args)
+  (apply pr args)
+  (newline)
+  (newline)
+  (car args))
+
+; (depends %macex)
+(define & (hash %macex (lambda (x) x)))
+
+; (depends %macex)
+(define _quote
+  (hash %macex (lambda (x) `',x)))
+
+; (depends %call)
 (define (call f . a)
   (let loop ((f f))
     (if (procedure? f)
         (apply f a)
         (loop (hash-ref f %call)))))
 
+; (depends update env)
+; TODO: rewrite to use unsafe-car and unsafe-cdr
+(define (env-def . a)
+  (let loop ((a a))
+    (unless (null? a)
+      (update env (car a) (box-immutable (cadr a)))
+      (loop (cddr a)))))
+
+; (depends env)
 (define (lookup x)
   (hash-ref (env) x (lambda () (error "undefined variable:" x))))
 
+; (depends lookup)
 (define (lookup-val x)
-  (let ((x (lookup x)))
-    (if (box? x)
-        (unsafe-unbox* x)
-        x)))
+  (if (symbol? x)
+      (let ((x (lookup x)))
+        (if (box? x)
+            (unsafe-unbox* x)
+            x))
+      x))
 
+; (depends %macex lookup-val)
 (define (macex? x)
   (let ((x (lookup-val x)))
     (if (and (hash? x)
@@ -80,15 +159,34 @@
         (hash-ref x %macex)
         #f)))
 
+; TODO: rewrite to use unsafe-car and unsafe-cdr
+(define (macex x)
+  (if (pair? x)
+      (let ((f (macex? (car x))))
+        (if f
+            (apply f (cdr x))
+            (let ((x (map macex x)))
+              (if (procedure? (car x))
+                  x
+                  (cons call x)))))
+      x))
+
+; (depends lookup macex? call evalable?)
 (define (compile x)
+  (prn "THIS " x)
   (cond ((symbol? x)
           (let ((x (lookup x)))
             (if (box? x)
-                (if (immutable? x)
-                    (unsafe-unbox* x)
+                (if #t ;(immutable? x)
+                    ; TODO: this doesn't work if the immutable box contains a symbol (or gensym)
+                    (let ((y (unsafe-unbox* x)))
+                      (if (evalable? y)
+                          `',y
+                          y))
                     (list unsafe-unbox* x))
                 x)))
         ((pair? x)
+          ; TODO: rewrite to use unsafe-car and unsafe-cdr
           (let ((f (macex? (car x))))
             (if f
                 (apply f (cdr x))
@@ -96,93 +194,11 @@
                   (if (procedure? (car x))
                       x
                       (cons call x))))))
+        ((number? x)
+          (real->double-flonum x))
         (else x)))
 
-
-;; Pattern matching
-(define (pattern-match-is u x body)
-  (list _if (list is? u x)
-            body
-            (list error "invalid pattern:" x)))
-
-(define (pattern-car x)
-  (if (pair? x)
-      (car x)
-      (error "invalid pattern:" x)))
-
-(define (pattern-match1 u x body)
-  (if (pair? x)
-      (let ((v (gensym)))
-        (update env v v)
-        (list _let v u (pattern-match v x body)))
-      (pattern-match u x body)))
-
-(define (pattern-match u x body)
-  (cond ((symbol? x)
-          (update env x x)
-          (list _let x u body))
-        ((pair? x)
-          (cond ((eq? (car x) 'list)
-                  (let loop ((x (cdr x)))
-                    (if (null? x)
-                        body
-                        (pattern-match1 (list pattern-car u) (car x)
-                          (pattern-match (list cdr u) ; TODO: replace with unsafe-cdr ?
-                            (if (null? (cdr x))
-                                ''()
-                                u)
-                            (loop (cdr x)))))))
-                ((eq? (car x) 'dict)
-                  (let loop ((x (cdr x)))
-                    (cond ((null? x)
-                            body)
-                          ((null? (cdr x))
-                            (error "invalid pattern:" (car x)))
-                          (else
-                            ;; TODO: replace hash-ref with get
-                            (pattern-match1 (list hash-ref u (car x))
-                              (cadr x)
-                              (loop (cddr x)))))))
-                ((eq? (car x) 'quote)
-                  (pattern-match-is u (list _quote (cadr x)) body)) ; TODO: a bit clunky
-                (else (error "invalid pattern:" x))))
-        (else
-          (pattern-match-is u x body))))
-
-
-;; Nino stuff
-(define do
-  (hash %macex (lambda args
-    `(begin ,@(map compile args)))))
-
-(define fn
-  (hash %macex (lambda (args . body)
-    (parameterize ((env (env)))
-      (let ((u (gensym)))
-        (update env u u)
-        `(lambda ,u ,(compile (pattern-match u args (cons do body)))))
-      #|(cond ((symbol? args)
-              (update env args args)
-              `(lambda ,args ,@(map compile body)))
-            ((and (pair? args)
-                  (eq? (car args) 'list))
-              )
-            (else (error "invalid pattern:" args)))|#
-))))
-
-(define (box-maker f)
-  (hash %macex (lambda (n v)
-    (let ((b  (f #f))
-          (u  (gensym)))
-      (update env n b)
-      `(let ((,u ,(compile v)))
-         (,unsafe-box*-cas! ,b ,#f ,u)
-         ;(,unsafe-set-box*! ,b ,u)
-         ,u)))))
-
-(define var   (box-maker box))
-(define const (box-maker box-immutable))
-
+; (depends %macex lookup compile)
 (define _set!
   (hash %macex (lambda (n v)
     (let ((b  (lookup n))
@@ -196,16 +212,29 @@
               `(set! ,b ,u))
          ,u)))))
 
-(define & (hash %macex (lambda (x) x)))
+; (depends %macex compile)
+(define do
+  (hash %macex (lambda args
+    `(begin ,@(map compile args)))))
 
-#|
-(eval `(set-box! ,(box 5) 10))
+; (depends %macex update env compile)
+(define (box-maker f)
+  (hash %macex (lambda (n [v %f])
+    (let ((b  (f #f))
+          (u  (gensym)))
+      (update env n b)
+      `(let ((,u ,(compile v)))
+         (,unsafe-box*-cas! ,b ,#f ,u)
+         ;(,unsafe-set-box*! ,b ,u)
+         ,u)))))
 
-(eval `(placeholder-set! ,(make-placeholder 5) 10))
+; (depends box-maker)
+(define var   (box-maker box))
+(define const (box-maker box-immutable))
 
-(eval `(,(make-parameter 5) 10))
-|#
 
+; (depends %macex %f compile)
+; TODO: can probably use unsafe-car and unsafe-cdr
 (define _if
   (hash %macex (lambda a
     (let loop ((a a))
@@ -218,21 +247,120 @@
                    ,(compile (cadr a))
                    ,(loop (cddr a)))))))))
 
+; (depends %macex update env compile)
 (define _let
   (hash %macex (lambda (n v . body)
-    ;(compile (list* do (list var n v) body))
     (update env n n)
     `(let ((,n ,(compile v))) ,@(map compile body)))))
 
-(define _quote
-  (hash %macex (lambda (x) `',x)))
+; (depends _if)
+(define (pattern-match-if test expected got body)
+  (list _if test
+            body
+            (list error (format "invalid pattern: expected ~s but got" expected) got)))
+
+; (depends pattern-match-if is?)
+(define (pattern-match-is x u body)
+  (pattern-match-if (list is? u x) x u body))
+
+; (mutual pattern-match)
+; (depends _let update env)
+(define (pattern-match1 x u body)
+  (if (pair? x)
+      (let ((v (gensym)))
+        (update env v v)
+        (list _let v u (pattern-match x v body)))
+      (pattern-match x u body)))
+
+; (mutual pattern-match1)
+; (depends _let _quote pattern-car pattern-match-if pattern-match-is)
+(define (pattern-match x u body)
+  (cond ((symbol? x)
+          (list _let x u body)
+          #|(let ((b (box #f)))
+            (update env x b)
+            (displayln x)
+            (displayln (lookup (cadr u)))
+            (list do (list unsafe-box*-cas! b #f u)
+                     body))|#
+        )
+        ((pair? x)
+          (cond ((eq? (car x) 'list)
+                  ; TODO: can probably use unsafe-car and unsafe-cdr
+                  (let loop ((x (cdr x)))
+                    (if (null? x)
+                        body
+                        (pattern-match1 (car x) (list (pattern-car x) u)
+                          (pattern-match u
+                            (list unsafe-cdr u)
+                            (if (null? (cdr x))
+                                (pattern-match-if (list null? u)
+                                  null
+                                  u
+                                  (loop (cdr x)))
+                                (loop (cdr x))))))))
+                ; TODO: can probably use unsafe-car and unsafe-cdr
+                ((eq? (car x) 'dict)
+                  (let loop ((x (cdr x)))
+                    (cond ((null? x)
+                            body)
+                          ((null? (cdr x))
+                            (error "invalid pattern:" (car x)))
+                          (else
+                            (pattern-match1 (cadr x)
+                              ;; TODO: replace hash-ref with get
+                              (list hash-ref u (car x))
+                              (loop (cddr x)))))))
+                ((eq? (car x) 'quote)
+                  (pattern-match-is (list _quote (cadr x)) u body)) ; TODO: a bit clunky
+                (else (error "invalid pattern:" x))))
+        (else
+          (pattern-match-is x u body))))
 
 
-(define (env-def . a)
-  (let loop ((a a))
-    (unless (null? a)
-      (update env (car a) (box-immutable (cadr a)))
-      (loop (cddr a)))))
+; (depends %macex update env compile pattern-match do)
+(define fn
+  (hash %macex (lambda (args . body)
+    (parameterize ((env (env)))
+      (let ((u (gensym)))
+        (update env u u)
+        `(lambda ,u ,(compile (pattern-match args u (cons do body)))))
+))))
+
+#|
+(eval `(set-box! ,(box 5) 10))
+
+(eval `(placeholder-set! ,(make-placeholder 5) 10))
+
+(eval `(,(make-parameter 5) 10))
+|#
+
+; TODO: this is only needed because Racket's foldl is busted
+(define (reduce init f args)
+  (let loop ([init  init]
+             [args  args])
+    (if (null? args)
+        init
+        (loop (f init (car args))
+              (cdr args)))))
+
+(define (0-or-more f i)
+  (case-lambda
+    [(x y) (f x y)]
+    [args  (reduce i f args)]))
+
+(define (1-or-more f)
+  (case-lambda
+    [(x y)      (f x y)]
+    [(x . args) (reduce x f args)]))
+
+; TODO: name isn't quite right
+(define (2-or-more f i)
+  (case-lambda
+    [(x)        (f i x)]
+    [(x y)      (f x y)]
+    [(x . args) (reduce x f args)]))
+
 
 (env-def
   ;; Macros
@@ -247,6 +375,7 @@
 
   ;; Functions
   '&compile   compile
+  'macex      macex
 
   'dict       hash
   'get        hash-ref
@@ -257,6 +386,18 @@
   'is         is?
 
   'list       list
+
+  'pr         pr
+  'prn        prn
+
+  '+          (0-or-more fl+ 0.0)
+  '*          (0-or-more fl* 1.0)
+  '-          (2-or-more fl- 0.0)
+  '/          (1-or-more fl/)
+  'min        (1-or-more flmin)
+  'max        (1-or-more flmax)
+  'abs        flabs
+  'mod        modulo
 
   ;; Other
   '%f         %f
@@ -304,7 +445,7 @@
                             it)))
             (if (eof-object? expr)
                 (when interactive (newline))
-                (begin (write (eval (compile expr)))
+                (begin (print (eval (compile expr)) write)
                        (newline)
                        (when interactive (newline))
                        ;; Abort to loop. (Calling `repl` directly would not be a tail call.)
