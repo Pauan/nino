@@ -90,8 +90,11 @@
 
 (define env     (make-parameter (hash)))
 
-(define %call   (gensym))
-(define %macex  (gensym))
+(struct type () #:transparent)
+
+; (depends type)
+(define %call   (type))
+(define %macex  (type))
 (define %f      #f)
 (define %t      #t)
 
@@ -159,26 +162,39 @@
         (hash-ref x %macex)
         #f)))
 
-; TODO: rewrite to use unsafe-car and unsafe-cdr
-(define (macex x)
-  (if (pair? x)
-      (let ((f (macex? (car x))))
-        (if f
-            (apply f (cdr x))
-            (let ((x (map macex x)))
-              (if (procedure? (car x))
-                  x
-                  (cons call x)))))
-      x))
+; (depends macex?)
+(define (mapper ftop x)
+  ; TODO: rewrite to use unsafe-car and unsafe-cdr
+  (let ((f (macex? (car x))))
+    (if f
+        (apply f (cdr x))
+        (let ((x (map ftop x)))
+          (if (procedure? (car x))
+              x
+              (cons call x))))))
 
-; (depends lookup macex? call evalable?)
+
+; (&compile (list dict %macex 5))
+; (&compile (list var 'a %macex))
+; (&compile (list dict 5 (uniq))) -> error
+; (list dict %macex 5)
+; (var foo (uniq)) foo
+
+#|
+{let u 5 u} -> (let ((u 5)) u)
+
+{dict %macex 5} -> (dict (quote u) 5)
+
+(uniqs {%macex %foo %bar}
+  {list %macex %foo %bar}) -> (list (quote u) (quote u) (quote u))
+|#
+
+; (depends lookup mapper evalable? env)
 (define (compile x)
-  (prn "THIS " x)
   (cond ((symbol? x)
           (let ((x (lookup x)))
             (if (box? x)
                 (if #t ;(immutable? x)
-                    ; TODO: this doesn't work if the immutable box contains a symbol (or gensym)
                     (let ((y (unsafe-unbox* x)))
                       (if (evalable? y)
                           `',y
@@ -186,14 +202,7 @@
                     (list unsafe-unbox* x))
                 x)))
         ((pair? x)
-          ; TODO: rewrite to use unsafe-car and unsafe-cdr
-          (let ((f (macex? (car x))))
-            (if f
-                (apply f (cdr x))
-                (let ((x (map compile x)))
-                  (if (procedure? (car x))
-                      x
-                      (cons call x))))))
+          (mapper compile x))
         ((number? x)
           (real->double-flonum x))
         (else x)))
@@ -231,7 +240,6 @@
 ; (depends box-maker)
 (define var   (box-maker box))
 (define const (box-maker box-immutable))
-
 
 ; (depends %macex %f compile)
 ; TODO: can probably use unsafe-car and unsafe-cdr
@@ -373,9 +381,13 @@
   '&          &
   'quote      _quote
 
+  'let        _let
+
   ;; Functions
   '&compile   compile
-  'macex      macex
+  'eval       eval
+  'uniq       gensym
+  'type       type
 
   'dict       hash
   'get        hash-ref

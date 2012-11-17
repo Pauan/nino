@@ -8,7 +8,7 @@
 (define debug (make-parameter #f))
 (define repl  (make-parameter #f))
 
-(nu-eval-file "02 nino")
+;(nu-eval-file "02 nino")
 
 (command-line
   #:program "Nino"
