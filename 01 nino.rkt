@@ -31,15 +31,57 @@
 ; Generic equality predicate, based on egal
 ; http://home.pipeline.com/~hbaker1/ObjectIdentity.html
 (define (is? x y)
-  (if (number? x)
-      (if (number? y)
-          (= x y)
-          #f)
-      (if (immutable? x)
-          ; TODO: do I need to check if y is immutable too?
-          (equal? x y)
+        ; needed because immutable? doesn't return #t on pairs
+  (cond ((pair? x)
+          ; TODO: I don't think this handles cycles correctly
+          (equal?/recur x y is?))
+        ; TODO: immutable? doesn't return #t on inspectable structures
+        ;       how do I make this work for structures?
+        ((immutable? x)
+              ; needed for vectors, strings, bytes, and boxes
+          (if (immutable? y)
+              ; TODO: I don't think this handles cycles correctly
+              (equal?/recur x y is?)
+              #f))
+        ((number? x)
+          (if (number? y)
+              (= x y)
+              #f))
+        (else
           ; need to use eqv? for characters
           (eqv? x y))))
+
+;(is? (list 1) (box-immutable 1))
+;(is? (box-immutable 1) (box 1))
+
+#|
+(define (is? x y)
+  (cond ((pair? x)
+          (and (is? (car x) (car y))
+               (is? (cdr x) (cdr y))))
+        ((number? x)
+          (if (number? y)
+              (= x y)
+              #f))
+        ((immutable? x)
+          (if (immutable? y)
+              (cond ((box? x)
+                      (if (box? y)
+                          (is? (unbox x) (unbox y))
+                          #f))
+                    ((vector? x)
+                      (for/and ([x x]
+                                [y y])
+                        (is? x y))
+                      (if (vector? y)
+                          (is? )
+                          #f)
+                      ))
+              #f))
+        (else
+          ; need to use eqv? for characters
+          (eqv? x y))))
+|#
 
 ; TODO: can probably use unsafe-car and unsafe-cdr
 (define (hash-remove* x . a)
@@ -335,6 +377,22 @@
         `(lambda ,u ,(compile (pattern-match args u (cons do body)))))
 ))))
 
+(define _and
+  (hash %macex
+    (case-lambda
+      [()         %t]
+      [(x)        (compile x)]
+      [(x . args) (compile (list _if x (cons _and args)))])))
+
+(define _or
+  (hash %macex
+    (case-lambda
+      [()         %f]
+      [(x)        (compile x)]
+      [(x . args) (compile (let ((u (gensym)))
+                             (list _let u x
+                               (list _if u u (cons _or args)))))])))
+
 #|
 (eval `(set-box! ,(box 5) 10))
 
@@ -352,35 +410,155 @@
         (loop (f init (car args))
               (cdr args)))))
 
+; TODO: I should probably change + and * to use 2-or-more
 (define (0-or-more f i)
-  (case-lambda
-    [(x y) (f x y)]
-    [args  (reduce i f args)]))
+  (let ((f (lambda (x y)
+             (list f (compile x) (compile y)))))
+    (hash %macex
+      (case-lambda
+        [()         i]
+        [(x)        (compile x)]
+        [(x y)      (f x y)]
+        [(x . args) (reduce x f args)]))))
 
 (define (1-or-more f)
-  (case-lambda
-    [(x y)      (f x y)]
-    [(x . args) (reduce x f args)]))
+  (let ((f (lambda (x y)
+             (list f (compile x) (compile y)))))
+    (hash %macex
+      (case-lambda
+        [(x)        (compile x)]
+        [(x y)      (f x y)]
+        [(x . args) (reduce x f args)]))))
 
 ; TODO: name isn't quite right
-(define (2-or-more f i)
-  (case-lambda
-    [(x)        (f i x)]
-    [(x y)      (f x y)]
-    [(x . args) (reduce x f args)]))
+(define (2-or-more f g)
+  (let ((f (lambda (x y)
+             (list f (compile x) (compile y)))))
+    (hash %macex
+      (case-lambda
+        [(x)        (list g (compile x))]
+        [(x y)      (f x y)]
+        [(x . args) (reduce x f args)]))))
 
+(define (fn->mac f)
+  (hash %macex (lambda args (cons f (map compile args)))))
+
+(define (complex? x)
+  (pair? x))
+
+(define (complex args f)
+  (let loop ((acc    null)
+             (a      args)
+             (l      null)
+             ;(first  #t)
+             )
+    (if (null? a)
+        (f (lambda (x)
+             (reduce x
+                     (lambda (x y)
+                       (list _let (car y) (cadr y) x))
+                     l))
+           (reverse acc))
+        (if (and (complex? (car a))
+                 (pair? (cdr a))
+                 ;(not first)
+                 )
+            (let ((u (gensym)))
+              (loop (cons u acc)
+                    (cdr a)
+                    (cons (list u (car a)) l)
+                    ;#f
+                    ))
+            (loop (cons (car a) acc)
+                  (cdr a)
+                  l
+                  ;#f
+                  )))))
+
+; (compile '(is 5 ((& foo) 1) ((& bar) 2) ((& qux) 3)))
+
+; (compile '(is 5 ((& foo) 1) ((& bar) 2)))
+
+; (compile '(is ((& foo) 1) ((& bar) 2) 5))
+
+#|
+(is (foo 1) (bar 2) (qux 3))
+
+(let u (foo 1)
+  (let v (bar 2)
+    (let w (qux 3)
+      (and (is u v) (is v w)))))
+|#
+(define (pairwise f a)
+  (if (null? (cdr a))
+      null
+      (cons (f (car a) (cadr a))
+            (pairwise f (cdr a)))))
+
+(define (fn-pairwise f g)
+  (hash %macex
+    (case-lambda
+      [()    %t]
+      [(x)   %t]
+      [(x y) (list f (compile x) (compile y))]
+      [args  (complex args (lambda (proc args)
+               (compile (proc (cons g (pairwise (lambda (x y) (list f x y)) args))))))])))
+
+#|
+(case-lambda
+  [(x)          %t]
+  [(x y . args) (if (f x y) (apply pairwise args) %f)])
+|#
+
+(define (make-comparer num str)
+  (lambda (x y)
+    (cond ((flonum? x)
+            (if (flonum? y)
+                (num x y)
+                #f))
+          ((string? x)
+            (if (string? y)
+                (str x y)
+                #f))
+          (else #f))))
 
 (env-def
-  ;; Macros
-  'if         _if
-  'do         do
-  'fn         fn
+  ;; Operators
+  '+          (0-or-more fl+ 0.0)
+  '*          (0-or-more fl* 1.0)
+  '-          (2-or-more fl- -)
+  '/          (1-or-more fl/)
+  'mod        (fn->mac modulo)
+
+  'and        _and
+  'or         _or
+
   'var        var
   'const      const
   'set!       _set!
+  'if         _if
+  'do         do
+  'fn         fn
+
+  'is         (fn-pairwise is? _and)
+  'not?       (fn->mac not)
+
+  'dict       (fn->mac hash)
+  'get        (fn->mac hash-ref)
+  'has?       (fn->mac hash-has-key?)
+  'set        (fn->mac hash-set*)
+  'rem        (fn->mac hash-remove*)
+
+  'list       (fn->mac list)
+
+  '<          (fn-pairwise (make-comparer unsafe-fl< string<?) _and)
+  '<=         (fn-pairwise (make-comparer unsafe-fl<= string<=?) _and)
+  '>          (fn-pairwise (make-comparer unsafe-fl> string>?) _and)
+  '=>         (fn-pairwise (make-comparer unsafe-fl>= string>=?) _and)
+
+  ;; Macros
   '&          &
   'quote      _quote
-
   'let        _let
 
   ;; Functions
@@ -389,27 +567,12 @@
   'uniq       gensym
   'type       type
 
-  'dict       hash
-  'get        hash-ref
-  'has        hash-has-key?
-  'set        hash-set*
-  'rem        hash-remove*
-
-  'is         is?
-
-  'list       list
-
   'pr         pr
   'prn        prn
 
-  '+          (0-or-more fl+ 0.0)
-  '*          (0-or-more fl* 1.0)
-  '-          (2-or-more fl- 0.0)
-  '/          (1-or-more fl/)
-  'min        (1-or-more flmin)
-  'max        (1-or-more flmax)
+  'min        min ; (1-or-more flmin)
+  'max        max ; (1-or-more flmax)
   'abs        flabs
-  'mod        modulo
 
   ;; Other
   '%f         %f

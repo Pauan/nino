@@ -1,6 +1,13 @@
-(var mac (dict %macex (fn (list name args body)
-  (&compile (list var name (list dict %macex (list fn args (list &compile body))))))))
+var mac: dict %macex: fn {name args body}
+  &compile {var name {dict %macex {fn args {&compile body}}}}
 
-(mac def (list name args body)
-  (list do (list var name)
-           (list set! name (list fn args body))))
+#|
+var mac: dict %macex: fn {name value}
+  let mac (fn {f}
+            (dict %macex (fn args (&compile: apply f args))))
+    &compile {var name {mac value}}
+|#
+
+mac def {name args body}
+  {do {var name}
+      {set! name {fn args body}}}
