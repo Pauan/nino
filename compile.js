@@ -1,4 +1,4 @@
-var exports, NINO = (function (n) {
+var NINO = (function (n) {
   "use strict";
 
   var forms = {}
@@ -68,7 +68,7 @@ var exports, NINO = (function (n) {
     }
 
     compileStatement = function (a) {
-      var r = (inBlock && a[0] === "function"
+      var r = (inBlock && (a[0] === "function" || a[0] === "object")
                 ? "(" + compileExpr(a) + ")"
                 : compileExpr(a))
       return r
@@ -100,7 +100,12 @@ var exports, NINO = (function (n) {
 
   function statement(s) {
     forms[s] = function (x) {
-      return s + " " + compile(x)
+      // TODO: check that this is correct
+      if (x === void 0) {
+        return s
+      } else {
+        return s + " " + compile(x)
+      }
     }
   }
 
@@ -166,7 +171,10 @@ var exports, NINO = (function (n) {
   }*/
 
   // Primitives
-  forms["name"] = forms["number"] = forms["boolean"] = function (x) {
+  forms["empty"] = function () {
+    return compile(["void", ["number", "0"]])
+  }
+  forms["name"] = forms["number"] = forms["boolean"] = forms["id"] = function (x) {
     return x
   }
   forms["null"] = function () {
@@ -176,7 +184,11 @@ var exports, NINO = (function (n) {
     return "/" + x.replace(/[\/\\]/g, "\\$&") + "/"
   }
   forms["string"] = function (x) {
-    return "\"" + x.replace(/["\\]/g, "\\$&") + "\""
+    return "\"" + x.replace(/["\\]/g, "\\$&")
+                   // TODO: inefficient
+                   .replace(/\n/g, "\\n")
+                   .replace(/\r/g, "\\r")
+                   .replace(/\t/g, "\\t") + "\""
   }
 
   // Statements
@@ -185,11 +197,22 @@ var exports, NINO = (function (n) {
   statement("debugger")
   statement("return")
   statement("throw")
+  /*forms["ssa"] = function (x, y) {
+    if (y === void 0) {
+      return "var " + x
+    } else {
+      return "var " + x + " = " + compile(y)
+    }
+  }*/
   forms["var"] = function (a) {
     // Precedence is 1 higher than the precedence for ","
     return resetPrecedence(6, function () {
       var r = a.map(function (a) {
-        return a[0] + " = " + compile(a[1])
+        if (a.length === 1) {
+          return a[0]
+        } else {
+          return a[0] + " = " + compile(a[1])
+        }
       })
       return "var " + r.join("\n" + spaces() + "  , ")
     })
@@ -202,6 +225,41 @@ var exports, NINO = (function (n) {
              (z.length
                ? " else " + oneOrMany(z)
                : "")
+  }
+  forms["try"] = function (x, cat, fin) {
+    var s = "try " + block(x) + cat.map(function (x) {
+      return " catch (" + x[0] + ") " + block(x[1])
+    }).join("")
+    if (fin.length) {
+      return s + " finally " + block(fin)
+    } else {
+      return s
+    }
+  }
+  forms["for"] = function (init, test, incr, body) {
+    return "for (" + compile(init) + "; " +
+                     compile(test) + "; " +
+                     compile(incr) + ") " +
+             block(body)
+  }
+  forms["while"] = function (test, body) {
+    return "while (" + compile(test) + ") " + block(body)
+  }
+
+  // TODO: fix this
+  forms["switch"] = function (test, cases, def) {
+    if (cases.length) {
+      return "switch (" + compile(test) + ") {\n" +
+               cases.map(function (x) {
+                 if (x[1].length) {
+                   return "case " + compile(x[0]) + ":\n" + indentBlock(x[1])
+                 } else {
+                   return "case " + compile(x[0]) + ":"
+                 }
+               }).join("\n") + "\n" + (def.length ? "default:\n" + indentBlock(def) : "") + "}"
+    } else {
+      return "switch (" + compile(test) + ") {}"
+    }
   }
 
   // Expressions
@@ -307,4 +365,4 @@ var exports, NINO = (function (n) {
   }
 
   return n
-})(exports || NINO || {})
+})(NINO || {})
