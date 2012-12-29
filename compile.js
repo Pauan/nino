@@ -11,8 +11,11 @@ var NINO = (function (n) {
     withPrecedence = function (i, f) {
       var old = precedence
       precedence = i
-      var r = f()
-      precedence = old
+      try {
+        var r = f()
+      } finally {
+        precedence = old
+      }
       if (old > i) {
         return "(" + r + ")"
       } else {
@@ -23,8 +26,11 @@ var NINO = (function (n) {
     resetPrecedence = function (i, f) {
       var old = precedence
       precedence = i
-      var r = f()
-      precedence = old
+      try {
+        var r = f()
+      } finally {
+        precedence = old
+      }
       return r
     }
   })()
@@ -78,9 +84,12 @@ var NINO = (function (n) {
       var old = indent
       indent += 2
 
-      var r = f()
+      try {
+        var r = f()
+      } finally {
+        indent = old
+      }
 
-      indent = old
       return r
     }
 
