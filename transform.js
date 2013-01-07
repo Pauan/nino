@@ -99,6 +99,7 @@ var NINO = (function (n) {
         return ["empty"]
 
       case "break":
+      case "throw":
         r.push(x)
         return ["empty"]
 
