@@ -297,7 +297,7 @@ var NINO = (function (n) {
   }
   forms["[]"] = function (x, y) {
     return withPrecedence(80, function () {
-      return compileStatement(x) + "[" + resetPrecedence(0, function () { compile(y) }) + "]"
+      return compileStatement(x) + "[" + resetPrecedence(0, function () { return compile(y) }) + "]"
     })
   }
   forms["call"] = function (x, a) {
