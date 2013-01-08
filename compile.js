@@ -274,12 +274,12 @@ var NINO = (function (n) {
   // Expressions
   forms["new"] = function (x, a) {
     // TODO: code duplication with forms["call"]
-    return withPrecedence(85, function () {
+    return withPrecedence(80, function () {
       return "new " + compile(x) + "(" + a.map(compile).join(", ") + ")"
     })
   }
   forms["."] = function (x, y) {
-    return withPrecedence(85, function () {
+    return withPrecedence(80, function () {
       if (Array.isArray(x) && x[0] === "number" && /^\d+$/.test(x[1])) {
         return compile(x) + "."
       } else {
@@ -288,7 +288,7 @@ var NINO = (function (n) {
     }) + "." + y
   }
   forms["[]"] = function (x, y) {
-    return withPrecedence(85, function () {
+    return withPrecedence(80, function () {
       return compileStatement(x) + "[" + compile(y) + "]"
     })
   }
