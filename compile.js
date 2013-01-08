@@ -216,11 +216,15 @@ var NINO = (function (n) {
   forms["var"] = function (a) {
     // Precedence is 1 higher than the precedence for ","
     return resetPrecedence(6, function () {
+      var iLongest = 0
+      a.forEach(function (a) {
+        iLongest = Math.max(iLongest, a[0].length)
+      })
       var r = a.map(function (a) {
         if (a.length === 1) {
           return a[0]
         } else {
-          return a[0] + " = " + compile(a[1])
+          return a[0] + new Array(iLongest - a[0].length + 1).join(" ") + " = " + compile(a[1])
         }
       })
       return "var " + r.join("\n" + spaces() + "  , ")
@@ -293,7 +297,7 @@ var NINO = (function (n) {
   }
   forms["[]"] = function (x, y) {
     return withPrecedence(80, function () {
-      return compileStatement(x) + "[" + compile(y) + "]"
+      return compileStatement(x) + "[" + resetPrecedence(0, function () { compile(y) }) + "]"
     })
   }
   forms["call"] = function (x, a) {
