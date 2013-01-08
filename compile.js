@@ -275,7 +275,11 @@ var NINO = (function (n) {
   forms["new"] = function (x, a) {
     // TODO: code duplication with forms["call"]
     return withPrecedence(80, function () {
-      return "new " + compile(x) + "(" + a.map(compile).join(", ") + ")"
+      return "new " + compile(x) + "(" +
+               // TODO: don't hardcode 6
+               resetPrecedence(6, function () {
+                 return a.map(compile).join(", ")
+               }) + ")"
     })
   }
   forms["."] = function (x, y) {
@@ -294,7 +298,11 @@ var NINO = (function (n) {
   }
   forms["call"] = function (x, a) {
     return withPrecedence(80, function () {
-      return compileStatement(x) + "(" + a.map(compile).join(", ") + ")"
+      return compileStatement(x) + "(" +
+               // TODO: don't hardcode 6
+               resetPrecedence(6, function () {
+                 return a.map(compile).join(", ")
+               }) + ")"
     })
   }
   unary(75, "++")
