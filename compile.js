@@ -224,6 +224,7 @@ var NINO = (function (n) {
         if (a.length === 1) {
           return a[0]
         } else {
+                        // TODO: should write a helper function for this
           return a[0] + new Array(iLongest - a[0].length + 1).join(" ") + " = " + compile(a[1])
         }
       })
@@ -243,7 +244,7 @@ var NINO = (function (n) {
     var s = "try " + block(x) + cat.map(function (x) {
       return " catch (" + x[0] + ") " + block(x[1])
     }).join("")
-    if (fin.length) {
+    if (fin.length || !cat.length) {
       return s + " finally " + block(fin)
     } else {
       return s
