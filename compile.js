@@ -232,13 +232,17 @@ var NINO = (function (n) {
     })
   }
   forms["if"] = function (x, y, z) {
-    return "if (" + compile(x) + ") " +
-             (y.length
-               ? oneOrMany(y, z.length)
-               : ";") +
-             (z.length
-               ? " else " + oneOrMany(z)
-               : "")
+    if (y.length || z.length) {
+      return "if (" + compile(x) + ") " +
+               (y.length
+                 ? oneOrMany(y, z.length)
+                 : ";") +
+               (z.length
+                 ? " else " + oneOrMany(z)
+                 : "")
+    } else {
+      return compile(x)
+    }
   }
   forms["try"] = function (x, cat, fin) {
     if (cat.length || fin.length) {
