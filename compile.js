@@ -241,13 +241,17 @@ var NINO = (function (n) {
                : "")
   }
   forms["try"] = function (x, cat, fin) {
-    var s = "try " + block(x) + cat.map(function (x) {
-      return " catch (" + x[0] + ") " + block(x[1])
-    }).join("")
-    if (fin.length || !cat.length) {
-      return s + " finally " + block(fin)
+    if (cat.length || fin.length) {
+      var s = "try " + block(x) + cat.map(function (x) {
+        return " catch (" + x[0] + ") " + block(x[1])
+      }).join("")
+      if (fin.length) {
+        return s + " finally " + block(fin)
+      } else {
+        return s
+      }
     } else {
-      return s
+      return blockStatements(x)
     }
   }
   forms["for"] = function (init, test, incr, body) {
