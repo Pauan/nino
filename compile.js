@@ -93,11 +93,38 @@ var NINO = (function (n) {
       return r
     }
 
+    function isBlock(x) {
+      if (Array.isArray(x)) {
+        switch (x[0]) {
+        // TODO: more elaborate checking for these three
+        case "if":
+        case "for":
+        case "while":
+
+        case "switch":
+        case "try":
+          return true
+        }
+      }
+    }
+
+    n.joinStatements = function (a, line) {
+      var r = []
+      for (var i = 0, iLen = a.length; i < iLen; ++i) {
+        if (i === iLen - 1 || isBlock(a[i])) {
+          r.push(a[i])
+        } else {
+          r.push(a[i], ";" + line)
+        }
+      }
+      return r.join("")
+    }
+
     blockStatements = function (a) {
       inBlock = true
-      return a.map(function (x) {
+      return n.joinStatements(a.map(function (x) {
         return spaces() + compileStatement(x)
-      }).join(";\n")
+      }), "\n")
     }
 
     indentBlock = function (a) {
@@ -164,6 +191,7 @@ var NINO = (function (n) {
 
   function oneOrMany(x, colon) {
     if (x.length === 1) {
+      // TODO: this may not work if the expression is a statement
       return compile(x[0]) + (colon ? ";" : "")
     } else {
       return block(x)
@@ -233,9 +261,9 @@ var NINO = (function (n) {
   }
   forms["if"] = function (x, y, z) {
     if (y.length || z.length) {
-      return "if (" + compile(x) + ") " +
+      return "if (" + compile(x) + ")" +
                (y.length
-                 ? block(y) // oneOrMany(y, z.length)
+                 ? " " + block(y) // oneOrMany(y, z.length)
                  : ";") +
                (z.length
                  ? " else " + block(z) // oneOrMany(z)
