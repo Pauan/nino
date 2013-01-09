@@ -235,10 +235,10 @@ var NINO = (function (n) {
     if (y.length || z.length) {
       return "if (" + compile(x) + ") " +
                (y.length
-                 ? oneOrMany(y, z.length)
+                 ? block(y) // oneOrMany(y, z.length)
                  : ";") +
                (z.length
-                 ? " else " + oneOrMany(z)
+                 ? " else " + block(z) // oneOrMany(z)
                  : "")
     } else {
       return compile(x)
