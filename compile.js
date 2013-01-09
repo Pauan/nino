@@ -94,7 +94,8 @@ var NINO = (function (n) {
     }
 
     function isBlock(x) {
-      if (Array.isArray(x)) {
+      return /^(?:if|for|while|switch|try)/.test(x) && /\}$/.test(x)
+      /*if (Array.isArray(x)) {
         switch (x[0]) {
         // TODO: more elaborate checking for these three
         case "if":
@@ -105,14 +106,16 @@ var NINO = (function (n) {
         case "try":
           return true
         }
-      }
+      }*/
     }
 
     n.joinStatements = function (a, line) {
       var r = []
       for (var i = 0, iLen = a.length; i < iLen; ++i) {
-        if (i === iLen - 1 || isBlock(a[i])) {
+        if (i === iLen - 1) {
           r.push(a[i])
+        } else if (isBlock(a[i])) {
+          r.push(a[i], line)
         } else {
           r.push(a[i], ";" + line)
         }
