@@ -11,9 +11,24 @@ var NINO = (function (n) {
     return n.opArray(s, [].slice.call(arguments, 1))
   }
 
+  n.fromJSON = function (x) {
+    if (typeof x === "number") {
+      return n.op("number", x)
+    } else if (typeof x === "string") {
+      return n.op("string", x)
+    } else if (x.isLiteral) {
+      return x
+    } else {
+      return n.opArray(x[0], x.slice(1).map(n.fromJSON))
+    }
+  }
+
   n.compile = function (x, scope, info) {
+    if (info == null) {
+      info = {}
+    }
     if (info.type == null) {
-      info.type === "expression"
+      info.type = "expression"
     }
     if (info.minified == null) {
       info.minified = false

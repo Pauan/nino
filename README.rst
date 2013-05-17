@@ -1,10 +1,10 @@
 How to use
 ==========
 
-First, you must create a Nino AST by calling the ``NINO.opArray``, ``NINO.op``, or ``NINO.fromJSON`` functions::
+First, you must create a Nino AST by calling the ``NINO.op``, ``NINO.opArray``, or ``NINO.fromJSON`` functions::
 
-  var code = NINO.opArray("+", [...])
   var code = NINO.op("+", ...)
+  var code = NINO.opArray("+", [...])
   var code = NINO.fromJSON(["+", ...])
 
 To see which operators are defined, just search for ``makeOp`` in the file ``compile.js``. They generally follow JavaScript names and semantics.
@@ -55,61 +55,50 @@ Instead, let Nino handle all of that. Some cool features that Nino has:
 
   * ``"if"`` supports 1 or more arguments::
 
-      NINO.fromJSON(["if", ["number", 1]])
+      NINO.fromJSON(["if", 1])
 
       1
 
     ::
 
-      NINO.fromJSON(["if", ["number", 1], ["number", 2]])
+      NINO.fromJSON(["if", 1, 2])
 
       1 && 2
 
     ::
 
-      NINO.fromJSON(["if", ["number", 1], ["number", 2], ["number", 3]])
+      NINO.fromJSON(["if", 1, 2, 3])
 
       1 ? 2 : 3
 
     ::
 
-      NINO.fromJSON(["if", ["number", 1], ["number", 2], ["number", 3], ["number", 4]])
+      NINO.fromJSON(["if", 1, 2, 3, 4])
 
       1 ? 2 : 3 && 4
 
   * ``"<"``, ``"<="``, ``">"``, ``">="``, ``"=="``, ``"!="``, ``"==="``, and ``"!=="`` all support more than 2 arguments with the following behavior::
 
-      NINO.fromJSON(["<", ["number", 1],
-                          ["number", 2],
-                          ["number", 3],
-                          ["number", 4],
-                          ["number", 5]])
+      NINO.fromJSON(["<", 1, 2, 3, 4, 5])
 
       1 < 2 && 3 < 4 && 4 < 5
 
     ::
 
-      NINO.fromJSON(["==", ["number", 1],
-                           ["number", 2],
-                           ["number", 3],
-                           ["number", 4],
-                           ["number", 5]])
+      NINO.fromJSON(["==", 1, 2, 3, 4, 5])
 
       1 == 2 && 2 == 3 && 3 == 4 && 4 == 5
 
   * *All* statements can be used in expression position::
 
-      NINO.fromJSON(["+", ["number", 1],
-                          ["return", ["number", 2]]])
+      NINO.fromJSON(["+", 1, ["return", 2]])
 
       return 2;
       1 + void 0
 
     ::
 
-      NINO.fromJSON(["+", ["number", 1],
-                          ["try", ["number", 2],
-                                  ["finally", ["number", 3]]]])
+      NINO.fromJSON(["+", 1, ["try", 2, ["finally", 3]]])
 
       var a;
       try {
@@ -121,9 +110,7 @@ Instead, let Nino handle all of that. Some cool features that Nino has:
 
     ::
 
-      NINO.fromJSON(["+", ["number", 1],
-                          ["while", ["number", 2],
-                                    ["number", 3]]])
+      NINO.fromJSON(["+", 1, ["while", 2, 3]])
 
       while (2)
         3;
@@ -131,16 +118,14 @@ Instead, let Nino handle all of that. Some cool features that Nino has:
 
     ::
 
-      NINO.fromJSON(["+", ["number", 1],
-                          ["var", ["=", ["symbol", "a"], ["number", 1]]]])
+      NINO.fromJSON(["+", 1, ["var", ["=", NINO.op("symbol", "a"), 2]]])
 
-      var a = 1;
+      var a = 2;
       1 + a
 
   * Can generate helpful warnings, e.g. about useless expressions::
 
-      NINO.fromJSON([",", ["return", ["number", 1]],
-                          ["number", 2]])
+      NINO.fromJSON([",", ["return", 1], 2])
 
       (warning) useless expression: 2
       return 1;

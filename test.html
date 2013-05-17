@@ -9,21 +9,9 @@
         , b = NINO.op("box", "b")
         , c = NINO.op("box", "c")
 
-      function trans(x) {
-        if (typeof x === "number") {
-          return NINO.op("number", x)
-        } else if (typeof x === "string") {
-          return NINO.op("string", x)
-        } else if (x.isLiteral) {
-          return x
-        } else {
-          return NINO.opArray(x[0], x.slice(1).map(trans))
-        }
-      }
-
       function expr(a) {
         a.map(function (x) {
-          return NINO.traverse(trans(x), scope)
+          return NINO.traverse(NINO.fromJSON(x), scope)
         }).forEach(function (x) {
           try {
             console.log(NINO.compile(x, scope, {
@@ -391,6 +379,8 @@
 
         [",", NINO.op("bypass", "var YESNOTESTINGHAHAHA = 5"),
               ["+", 5, 20]],
+
+        ["+", 1, ["var", ["=", NINO.op("symbol", "a"), 2]]],
       ])
 
       /*expr(["switch", 1,
