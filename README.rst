@@ -125,11 +125,14 @@ Instead, let Nino handle all of that. Some cool features that Nino has:
 
   * Can generate helpful warnings, e.g. about useless expressions::
 
-      NINO.fromJSON([",", ["return", 1], 2])
+      NINO.fromJSON(["function", [","],
+                      [",", ["return", 1], 2]])
 
-      (warning) useless expression: 2
-      return 1;
-      2
+      warning: useless expression: 2
+      (function () {
+        return 1;
+        2
+      })
 
   * All JavaScript operators and statements are supported *except* for the following:
 
