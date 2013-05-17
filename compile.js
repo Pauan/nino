@@ -374,9 +374,16 @@ var NINO = (function (n) {
             // TODO should store the middle expressions so it doesn't recompute them
             if (o.pairwise) {
               var r = []
-              x.args.reduce(function (x, y) {
-                r.push(n.op(s, x, y))
-                return y
+              var len = x.args.length - 1
+              x.args.reduce(function (x, y, i) {
+                if (isImpure(y) && i !== len) {
+                  var u = n.op("box")
+                  r.push(n.op(s, x, n.op("var", n.op("=", u, y))))
+                  return u
+                } else {
+                  r.push(n.op(s, x, y))
+                  return y
+                }
               })
               return expression(n.opArray(o.pairwise, r))
             } else {
