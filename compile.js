@@ -151,6 +151,62 @@ var NINO = (function (n) {
     , statements
     , expressions
 
+  var reserved = {}
+
+  // https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Reserved_Words
+  ;("break case catch continue debugger default delete do else finally for function if in instanceof new return switch this throw try typeof var void while with " +
+    "class enum export extends import super " +
+    "implements interface let package private protected public static yield " +
+    "null true false").split(" ").forEach(function (s) {
+    reserved[s] = true
+  })
+
+  /*
+  Object.getOwnPropertyNames(window).forEach(function (s) {
+    if (!Object.getOwnPropertyDescriptor(window, s).writable) {
+      console.log(s)
+    }
+  })
+  */
+
+  function mangle(s) {
+    if (reserved[s]) {
+      return "_" + s
+    } else {
+      return s.replace(/^([0-9])|([a-z])\-([a-z])|[^$a-zA-Z0-9]/g, function (s, s1, s2, s3) {
+        if (s1) {
+          return "_" + s1
+        } else if (s2) {
+          return s2 + s3.toLocaleUpperCase()
+        } else {
+          return s === "_" ? "__" : "_" + s.charCodeAt(0) + "_"
+        }
+      })
+    }
+  }
+
+  function unmangle(s) {
+    // |([a-z])([A-Z])
+    return s.replace(/_([0-9]*)_|^_([a-z0-9])/g, function (_, s, s1) {
+      if (s1) {
+        return s1
+      } else {
+        return s === "" ? "_" : String.fromCharCode(s)
+      }
+    })
+  }
+
+  function mangleBox(s) {
+    // TODO: document isn't writable either, but should probably be handled in a different way
+    if (s === "undefined" || s === "NaN" || s === "Infinity" || s === "arguments") {
+      return "_" + s
+    } else {
+      return mangle(s)
+    }
+  }
+
+  // mangle("50fooBar-qux")
+
   /*n.onScope.push(function (scope) {
     if (scope.vars == null) {
       scope.vars = Object.create(vars)
@@ -214,9 +270,10 @@ var NINO = (function (n) {
     })
   }
 
-  function compileLoop(name, test, body) {
+  function compileLoop(x, name, test, body) {
     return withScope("loop", function () {
       if (body.op === ";") {
+        x.noSemicolon = true
         return compileBlock(name, "(" + test + ")" + minify(" "), body)
       } else {
         return resetPriority(0, function () {
@@ -691,7 +748,7 @@ var NINO = (function (n) {
     isVariable: true,
     isLiteral: true,
     compile: function (x) {
-      return x.args[0]
+      return mangle(x.args[0])
     }
   })
 
@@ -700,9 +757,9 @@ var NINO = (function (n) {
     isLiteral: true,
     compile: function (x) {
       if (x.string) {
-        return x.string
+        return mangleBox(x.string)
       } else if (x.args[0]) {
-        return getBox(x, x.args[0])
+        return mangleBox(getBox(x, x.args[0]))
       } else {
         return getUniq(x)
       }
@@ -1137,7 +1194,6 @@ var NINO = (function (n) {
   })
 
   makeOp("while", {
-    noSemicolon: true,
     isImpure: true, // TODO should this be impure?
     statement: function (x) {
       spliceBlock(x, 0)
@@ -1150,12 +1206,11 @@ var NINO = (function (n) {
       return expression(n.op("void", n.op("number", 0)))
     },
     compile: function (x) {
-      return compileLoop("while", compile(x.args[0]), x.args[1])
+      return compileLoop(x, "while", compile(x.args[0]), x.args[1])
     }
   })
 
   makeOp("for", {
-    noSemicolon: true,
     isImpure: true, // TODO
     statement: function (x) {
       if (x.args[0].op === "var") {
@@ -1177,14 +1232,13 @@ var NINO = (function (n) {
       if (x.args[0].op === "var") {
         x.args[0].isInline = true
       }
-      return compileLoop("for", compile(x.args[0]) + ";" + minify(" ") +
-                                compile(x.args[1]) + ";" + minify(" ") +
-                                compile(x.args[2]), x.args[3])
+      return compileLoop(x, "for", compile(x.args[0]) + ";" + minify(" ") +
+                                   compile(x.args[1]) + ";" + minify(" ") +
+                                   compile(x.args[2]), x.args[3])
     }
   })
 
   makeOp("for-in", {
-    noSemicolon: true,
     isImpure: true, // TODO
     statement: function (x) {
       spliceBlock(x, 0)
@@ -1211,7 +1265,7 @@ var NINO = (function (n) {
       return expression(n.op("void", n.op("number", 0)))
     },
     compile: function (x) {
-      return compileLoop("for", compile(x.args[0]) + " in " + compile(x.args[1]), x.args[2])
+      return compileLoop(x, "for", compile(x.args[0]) + " in " + compile(x.args[1]), x.args[2])
     }
   })
 
@@ -1300,6 +1354,14 @@ var NINO = (function (n) {
     },
     compile: function (x) {
       return compileBlock("finally", "", x.args[0])
+    }
+  })
+
+  makeOp("bypass", {
+    isImpure: true, // TODO
+    isLiteral: true,
+    compile: function (x) {
+      return "" + x.args[0]
     }
   })
 

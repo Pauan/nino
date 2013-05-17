@@ -363,6 +363,16 @@
           ["return", 1]],
 
         ["+", NINO.op("box", "foo"), 1],
+
+        NINO.op("symbol", "50fooBar-qux"),
+        NINO.op("symbol", "break"),
+        NINO.op("symbol", "NaN"),
+        NINO.op("box", "arguments"),
+        NINO.op("symbol", "_arguments"),
+        NINO.op("symbol", "_"),
+
+        [",", NINO.op("bypass", "var YESNOTESTINGHAHAHA = 5"),
+              ["+", 5, 20]],
       ])
 
       /*expr(["switch", 1,
