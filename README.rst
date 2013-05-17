@@ -42,7 +42,7 @@ If you're designing a language that compiles to JavaScript, you have to deal wit
 
 * Funky variable behavior (var hoisting, among other things)
 
-Instead, let Nino handle all of that. Some more cool features that Nino has:
+Instead, let Nino handle all of that. Some cool features that Nino has:
 
 * With a single line of code you can choose whether to output a normal or minified string: no need for a separate minifier.
 
@@ -136,6 +136,15 @@ Instead, let Nino handle all of that. Some more cool features that Nino has:
       var a = 1
       1 + a
 
+  * Can generate helpful warnings, e.g. about useless expressions::
+
+      NINO.op(",", NINO.op("return", NINO.op("number", 1)),
+                   NINO.op("number", 2))
+
+      (warning) useless expression: 2
+      return 1;
+      2
+
   * All JavaScript operators and statements are supported *except* for the following:
 
     * `block <https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Statements/block>`_
@@ -155,7 +164,7 @@ Instead, let Nino handle all of that. Some more cool features that Nino has:
 .. [#traverse]
    Why can't you just call ``NINO.compile`` directly?
 
-   Let's suppose you wanted to compile multiple files using the Nino compiler. If you naively compiled each file separately, then it wouldn't work, because Nino needs to know *all* the variables that are defined.
+   Let's suppose you wanted to compile multiple files using the Nino compiler. If you naively compiled each file separately, then it wouldn't work, because Nino needs to know about *all* the variables that are defined.
 
    So instead, you first call ``NINO.traverse`` on all of the files, and then afterwards you call ``NINO.compile``.
 
