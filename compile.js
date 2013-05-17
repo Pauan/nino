@@ -758,7 +758,7 @@ var NINO = (function (n) {
     compile: function (x) {
       if (x.string) {
         return mangleBox(x.string)
-      } else if (x.args[0]) {
+      } else if (x.args[0] && !minified) {
         return mangleBox(getBox(x, x.args[0]))
       } else {
         return getUniq(x)

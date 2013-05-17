@@ -1,4 +1,35 @@
-What is it?
+How to use
+==========
+
+First, you must create a Nino AST by calling the ``NINO.opArray`` or ``NINO.op`` functions::
+
+  var code = NINO.opArray("+", [...])
+  var code = NINO.op("+", ...)
+
+To see which operators are defined, just search for ``makeOp`` in the file ``compile.js``. They generally follow JavaScript names and semantics.
+
+Now that you have an AST, you need to pass it to the ``NINO.traverse`` function [#traverse]_ along with a scope, which is simply an object that says which global variables are defined::
+
+  var scope = { foo: true, bar: true }
+  var ast   = NINO.traverse(code, scope)
+
+In the above example, Nino will treat the variables ``foo`` and ``bar`` as being defined, so that they won't collide with any boxes [#boxes]_.
+
+Lastly, you call ``NINO.compile`` which returns a string::
+
+  NINO.compile(ast, scope)
+
+In addition, you can pass an object as the third argument, which supports the following properties::
+
+  NINO.compile(ast, scope, {
+    type: "expression",
+    minified: false,
+    warnings: true
+  })
+
+The ``type`` property determines whether the top level is treated as an ``"expression"`` (the default), or a ``"statement"``. REPLs will generally want to use ``"expression"`` since they return a value. On the other hand, if you're putting the string into a file which will be loaded later, you should use ``"statement"``.
+
+Why use it?
 ===========
 
 If you're designing a language that compiles to JavaScript, you have to deal with quite a few problems:
@@ -11,19 +42,17 @@ If you're designing a language that compiles to JavaScript, you have to deal wit
 
 * Funky variable behavior (var hoisting, among other things)
 
-Instead, let Nino handle all of that. You simply design your compiler so that it compiles to a Nino AST, then you call ``NINO.traverse``, and lastly ``NINO.compile`` which returns a string for the program.
-
-Some more cool features that Nino has:
+Instead, let Nino handle all of that. Some more cool features that Nino has:
 
 * With a single line of code you can choose whether to output a normal or minified string: no need for a separate minifier.
 
 * Generates *very* short and *very* fast JavaScript.
 
-* In addition to a "symbol" datatype, Nino also has a "box" datatype. The only difference is that a "box" is guaranteed to never collide with any other variable [#boxes]_. If you've used Lisps, a "box" is exactly the same as a gensym.
+* In addition to a ``"symbol"`` datatype, Nino also has a ``"box"`` datatype. The only difference is that a ``"box"`` is guaranteed to never collide with any other variable [#boxes]_. If you've used Lisps, a ``"box"`` is exactly the same as a gensym.
 
 * The Nino AST is generally fairly simple and intelligent. It has some conveniences:
 
-  * "if" supports 1 or more arguments::
+  * ``"if"`` supports 1 or more arguments::
 
       NINO.op("if", NINO.op("number", 1))
 
@@ -47,7 +76,7 @@ Some more cool features that Nino has:
 
       1 ? 2 : 3 && 4
 
-  * "<", "<=", ">", ">=", "==", "!=", "===", and "!==" all support more than 2 arguments with the following behavior::
+  * ``"<"``, ``"<="``, ``">"``, ``">="``, ``"=="``, ``"!="``, ``"==="``, and ``"!=="`` all support more than 2 arguments with the following behavior::
 
       NINO.op("<", NINO.op("number", 1),
                    NINO.op("number", 2),
@@ -122,6 +151,13 @@ Some more cool features that Nino has:
     * `import <https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Statements/import>`_
     * `let <https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Statements/let>`_
     * `yield <https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Operators/yield>`_
+
+.. [#traverse]
+   Why can't you just call ``NINO.compile`` directly?
+
+   Let's suppose you wanted to compile multiple files using the Nino compiler. If you naively compiled each file separately, then it wouldn't work, because Nino needs to know *all* the variables that are defined.
+
+   So instead, you first call ``NINO.traverse`` on all of the files, and then afterwards you call ``NINO.compile``.
 
 .. [#boxes]
    There are two important caveats regarding boxes. Nino prevents boxes from colliding with other variables by *renaming the boxes*. This means that as long as Nino is aware of *all* the variables that are defined, then everything will work correctly.
