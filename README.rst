@@ -33,7 +33,7 @@ The ``type`` property determines whether the top level is treated as an ``"expre
 Why use it?
 ===========
 
-If you're designing a language that compiles to JavaScript, you have to deal with quite a few problems:
+If you're designing a language that compiles to JavaScript, you have to deal with some annoying problems:
 
 * Distinction between statements and expressions
 

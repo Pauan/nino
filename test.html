@@ -447,6 +447,17 @@
 
         ["=", a, ["=", b, ["=", c, 1]]],
         ["=", a, b, c, 1],
+
+        ["single-comment", "foobarquxcorge"],
+        ["multi-comment", "testing*/\ntesting\ntesting"],
+
+        [",", ["multi-comment", "testing*/\ntesting\ntesting"],
+              ["call", 1, 2]],
+
+        ["function", [","],
+          [",", ["multi-comment", "documentation goes here"],
+                ["single-comment", "documentation goes here"],
+                ["return", 2]]],
       ])
 
       /*expr(["switch", 1,

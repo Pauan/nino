@@ -335,7 +335,7 @@ var NINO = (function (n) {
 
   function useless(w) {
     var x = unwrap(w)
-    if (!isImpure(x)) { // TODO
+    if (!isImpure(x) && !x.isUseful) { // TODO
       x.isUseless = true
     }
   }
@@ -1543,6 +1543,30 @@ var NINO = (function (n) {
     isStatement: true, // TODO
     compile: function (x) {
       return "" + x.args[0]
+    }
+  })
+
+  makeOp("single-comment", {
+    isUseful: true,
+    noSemicolon: true,
+    isLiteral: true,
+    compile: function (x) {
+      return "// " + x.args[0]
+    }
+  })
+
+  makeOp("multi-comment", {
+    isUseful: true,
+    noSemicolon: true,
+    isLiteral: true,
+    compile: function (x) {
+      return "/**\n" + space() + " * " + x.args[0].replace(/\*\/|\n/g, function (s) {
+        if (s === "\n") {
+          return "\n" + space() + " * "
+        } else {
+          return "* /"
+        }
+      }) + "\n" + space() + " */"
     }
   })
 
