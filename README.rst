@@ -14,7 +14,7 @@ Now that you have an AST, you need to pass it to the ``NINO.traverse`` function 
   var scope = { foo: true, bar: true }
   var ast   = NINO.traverse(code, scope)
 
-In the above example, Nino will treat the variables ``foo`` and ``bar`` as being defined, so that they won't collide with any boxes [#boxes]_.
+In the above example, Nino will treat the variables ``foo`` and ``bar`` as being defined, so that they won't collide with any uniques [#uniques]_.
 
 Lastly, you call ``NINO.compile`` which returns a string::
 
@@ -49,7 +49,7 @@ Instead, let Nino handle all of that. Some cool features that Nino has:
 
 * Generates *very* short and *very* fast JavaScript.
 
-* In addition to a ``"symbol"`` datatype, Nino also has a ``"box"`` datatype. The only difference is that a ``"box"`` is guaranteed to never collide with any other variable [#boxes]_. If you've used Lisps, a ``"box"`` is exactly the same as a gensym.
+* In addition to a ``"symbol"`` datatype, Nino also has a ``"unique"`` datatype. The only difference is that a ``"unique"`` is guaranteed to never collide with any other variable [#uniques]_. If you've used Lisps, a ``"unique"`` is exactly the same as a gensym.
 
 * The Nino AST is generally fairly simple and intelligent. It has some conveniences:
 
@@ -91,37 +91,50 @@ Instead, let Nino handle all of that. Some cool features that Nino has:
 
   * *All* statements can be used in expression position::
 
-      NINO.fromJSON(["+", 1, ["return", 2]])
+      NINO.fromJSON(["+", ["call", 1, 2], ["throw", 3]])
 
-      return 2;
-      1 + void 0
+      1(2);
+      throw 3;
+      void 0 + void 0
 
     ::
 
-      NINO.fromJSON(["+", 1, ["try", 2, ["finally", 3]]])
+      NINO.fromJSON(["+", ["call", 1, 2], ["debugger"]])
 
-      var a;
+      var a = 1(2);
+      debugger;
+      a + void 0
+
+    ::
+
+      NINO.fromJSON(["+", ["call", 1, 2], ["try", 3, ["finally", 4]]])
+
+      var a = 1(2),
+          b;
       try {
-        a = 2
+        b = 3
       } finally {
-        3
+        4
       }
-      1 + a
+      a + b
 
     ::
 
-      NINO.fromJSON(["+", 1, ["while", 2, 3]])
+      NINO.fromJSON(["+", ["call", 1, 2], ["while", 3, 4]])
 
-      while (2)
-        3;
-      1 + void 0
+      var a = 1(2);
+      while (3)
+        4;
+      a + void 0
 
     ::
 
-      NINO.fromJSON(["+", 1, ["var", ["=", NINO.op("symbol", "a"), 2]]])
+      NINO.fromJSON(["+", ["call", 1, 2],
+                          ["var", ["=", ["symbol", "a"], ["call", 3, 4]]]])
 
-      var a = 2;
-      1 + a
+      var b = 1(2),
+          a = 3(4);
+      b + a
 
   * Can generate helpful warnings, e.g. about useless expressions::
 
@@ -157,11 +170,11 @@ Instead, let Nino handle all of that. Some cool features that Nino has:
 
    So instead, you first call ``NINO.traverse`` on all of the files, and then afterwards you call ``NINO.compile``.
 
-.. [#boxes]
-   There are two important caveats regarding boxes. Nino prevents boxes from colliding with other variables by *renaming the boxes*. This means that as long as Nino is aware of *all* the variables that are defined, then everything will work correctly.
+.. [#uniques]
+   There are two important caveats regarding uniques. Nino prevents uniques from colliding with other variables by *renaming the uniques*. This means that as long as Nino is aware of *all* the variables that are defined, then everything will work correctly.
 
-   But let's suppose you wrote some code which is compiled with the Nino compiler. In addition, you load a third-party JavaScript library which Nino does not know about. In this case, it is entirely possible that boxes could collide with variables defined by the third-party library.
+   But let's suppose you wrote some code which is compiled with the Nino compiler. In addition, you load a third-party JavaScript library which Nino does not know about. In this case, it is entirely possible that uniques could collide with variables defined by the third-party library.
 
-   The answer to this is to let Nino know about the symbols defined in the third-party library. This only applies to *global boxes*: local boxes (defined inside of a function) are *always* guaranteed to *never* collide.
+   The answer to this is to let Nino know about the symbols defined in the third-party library. This only applies to *global uniques*: local uniques (defined inside of a function) are *always* guaranteed to *never* collide.
 
-   Secondly, Nino provides a way to *completely bypass* the compiler and *insert arbitrary JavaScript code*. *Any* variables defined in this way could potentially collide with boxes.
+   Secondly, Nino provides a way to *completely bypass* the compiler and *insert arbitrary JavaScript code*. *Any* variables defined in this way could potentially collide with uniques.

@@ -2,6 +2,9 @@ var NINO = (function (n) {
   "use strict"
 
   n.opArray = function (s, args) {
+    if (ops[s] == null) {
+      throw new Error("unknown operator: " + s)
+    }
     var o = Object.create(ops[s])
     o.args = args
     return o
@@ -16,8 +19,12 @@ var NINO = (function (n) {
       return n.op("number", x)
     } else if (typeof x === "string") {
       return n.op("string", x)
+    } else if (x.op === "wrapper") {
+      return wrap(x, n.fromJSON(x.args[0]))
     } else if (x.isLiteral) {
       return x
+    } else if (ops[x[0]].isLiteral) {
+      return n.opArray(x[0], x.slice(1))
     } else {
       return n.opArray(x[0], x.slice(1).map(n.fromJSON))
     }
@@ -50,14 +57,15 @@ var NINO = (function (n) {
       var i = scopes.length
         , index
       while (i--) {
-        if (scopes[i].boxes && (index = scopes[i].boxes.indexOf(x)) !== -1) {
+        if (scopes[i].uniques && (index = scopes[i].uniques.indexOf(x)) !== -1) {
           return scopes[i].replace[index]
         }
       }
       return x
     }
 
-    function seen(x) {
+    function seen(w) {
+      var x = unwrap(w)
       if (x.op === "symbol") {
         var s = x.args[0]
           , i = scopes.length
@@ -68,29 +76,30 @@ var NINO = (function (n) {
           }
         }
       }
-      return x
     }
 
-    function bind(x) {
+    function bind(w) {
       var last = scopes[scopes.length - 1]
+      var x = unwrap(w)
       if (x.op === "symbol") {
         last.bound[x.args[0]] = true
-        return seen(x)
-      } else if (x.op === "box" && last.boxes) {
+        seen(x)
+        return wrap(w, x)
+      } else if (x.op === "unique" && last.uniques) {
         var y = find(x)
         if (y === x) {
-          y = n.opArray("box", x.args)
-          last.boxes.push(x)
+          y = n.opArray("unique", x.args)
+          last.uniques.push(x)
           last.replace.push(y)
         }
-        return y
+        return wrap(w, y)
       } else {
-        return x
+        return wrap(w, x)
       }
     }
 
     function withScope(x, f) {
-      scopes.push({ scope: x, bound: {}, boxes: [], replace: [] })
+      scopes.push({ scope: x, bound: {}, uniques: [], replace: [] })
       try {
         return f()
       } finally {
@@ -98,43 +107,49 @@ var NINO = (function (n) {
       }
     }
 
-    function traverse1(x) {
+    function traverse1(w) {
+      var x = unwrap(w)
       if (x.isLiteral) {
-        if (x.op === "box") {
-          return find(x)
+        if (x.op === "unique") {
+          return wrap(w, find(x))
         } else {
-          return x
+          return wrap(w, x)
         }
       } else {
         x.args = x.args.map(traverse1)
-        return x
+        return wrap(w, x)
       }
     }
 
-    function traverse(x) {
+    function traverse(w) {
+      var x = unwrap(w)
       if (x.isLiteral) {
-        return seen(x)
+        seen(x)
+        return wrap(w, x)
       } else if (x.op === "function") {
         x.scope = {}
         withScope(x.scope, function () {
-          x.args[0].args = x.args[0].args.map(bind)
-          x.args[1]      = traverse1(traverse(x.args[1]))
+          var args = unwrap(x.args[0])
+          args.args = args.args.map(bind)
+          x.args[1] = traverse1(traverse(x.args[1]))
         })
       } else if (x.op === "function-var") {
         x.args[0] = bind(x.args[0])
         x.scope = {}
         withScope(x.scope, function () {
-          x.args[1].args = x.args[1].args.map(bind)
-          x.args[2]      = traverse1(traverse(x.args[2]))
+          var args = unwrap(x.args[1])
+          args.args = args.args.map(bind)
+          x.args[2] = traverse1(traverse(x.args[2]))
         })
       } else if (x.op === "var") {
-        x.args = x.args.map(function (x) {
+        x.args = x.args.map(function (w) {
+          var x = unwrap(w)
           if (x.op === "=") {
             x.args[0] = bind(x.args[0])
             x.args[1] = traverse(x.args[1]) // TODO
-            return x
+            return wrap(w, x)
           } else {
-            return bind(x)
+            return wrap(w, bind(x))
           }
         })
       /* TODO
@@ -148,15 +163,14 @@ var NINO = (function (n) {
       } else {
         x.args = x.args.map(traverse)
       }
-      return x
+      return wrap(w, x)
     }
 
     return traverse(x)
   }
 
 
-  var impure   = false
-    , indent   = 0
+  var indent   = 0
     , priority = 0
     , ops      = {}
     , scope    = { loop: false, function: false }
@@ -200,7 +214,7 @@ var NINO = (function (n) {
     }
   }
 
-  function unmangle(s) {
+  /*function unmangle(s) {
     // |([a-z])([A-Z])
     return s.replace(/_([0-9]*)_|^_([a-z0-9])/g, function (_, s, s1) {
       if (s1) {
@@ -209,7 +223,7 @@ var NINO = (function (n) {
         return s === "" ? "_" : String.fromCharCode(s)
       }
     })
-  }
+  }*/
 
   function mangleBox(s) {
     // TODO: document isn't writable either, but should probably be handled in a different way
@@ -226,22 +240,41 @@ var NINO = (function (n) {
     if (scope.vars == null) {
       scope.vars = Object.create(vars)
     }
-    if (scope.boxes == null) {
-      scope.boxes = Object.create(boxes)
+    if (scope.uniques == null) {
+      scope.uniques = Object.create(uniques)
     }
 
     vars  = Object.create(vars)
-    boxes = Object.create(scope)
+    uniques = Object.create(scope)
   })*/
 
-  function jsProp(x) {
+  function jsProp(w) {
+    var x = unwrap(w)
     if (x.op === "string" && /^[$_a-zA-Z][$_a-zA-Z0-9]*$/.test(x.args[0])) {
       return x.args[0]
     }
   }
 
-  function compile(x) {
-    var s = x.compile(x)
+  function wrap(x, y) {
+    if (x.op === "wrapper") {
+      x.args[0] = y
+      return x
+    } else {
+      return y
+    }
+  }
+
+  function unwrap(x) {
+    if (x.op === "wrapper") {
+      return unwrap(x.args[0])
+    } else {
+      return x
+    }
+  }
+
+  function compile(w) {
+    var x = unwrap(w)
+      , s = x.compile(x)
     if (x.isUseless && warnings) {
       if (/\n/.test(s)) {
         console.warn("useless expression:\n" + space() + s)
@@ -252,7 +285,8 @@ var NINO = (function (n) {
     return s
   }
 
-  function compileFn(x) {
+  function compileFn(w) {
+    var x = unwrap(w)
     if (x.op === "function" || x.op === "object") {
       return "(" + compile(x) + ")"
     } else {
@@ -265,7 +299,7 @@ var NINO = (function (n) {
       return withVars(scope, function () {
         // n.changeScope(this.scope)
         return withScope("function", function () {
-          args = args.args.map(compile).join("," + minify(" "))
+          args = unwrap(args).args.map(compile).join("," + minify(" "))
           body = block(body)
           return "function" + (name ? " " + name : minify(" ")) + "(" +
                    args + ")" + minify(" ") +
@@ -287,8 +321,9 @@ var NINO = (function (n) {
 
   function compileLoop(x, name, test, body) {
     return withScope("loop", function () {
+      body = unwrap(body)
       if (body.op === ";") {
-        x.noSemicolon = true
+        unwrap(x).noSemicolon = true
         return compileBlock(name, "(" + test + ")" + minify(" "), body)
       } else {
         return resetPriority(0, function () {
@@ -298,14 +333,15 @@ var NINO = (function (n) {
     })
   }
 
-  function useless(x) {
-    if (!isImpure(x)) {
+  function useless(w) {
+    var x = unwrap(w)
+    if (!isImpure(x)) { // TODO
       x.isUseless = true
     }
-    return x
   }
 
-  function contains(y, x) {
+  /*function contains(w, x) {
+    var y = unwrap(w)
     if (y === x) {
       return true
     } else if (y.isLiteral) {
@@ -315,11 +351,12 @@ var NINO = (function (n) {
         return contains(y, x)
       })
     }
-  }
+  }*/
 
   function stmt(s, isBreak, f) {
     makeOp(s, {
       isImpure: true,
+      isStatement: true,
       isBreak: isBreak,
       statement: function (x) {
         x.args = x.args.map(expression)
@@ -329,11 +366,16 @@ var NINO = (function (n) {
         if (warnings) {
           console.warn("\"" + s + "\" was used in expression position")
         }
-        expressions.forEach(function (y) {
-          if (!contains(y, x) && isImpure(y)) {
-            statement(y)
-          }
-        })
+        if (x.isBreak) {
+          expressions.forEach(function (y) {
+            if (isImpure(y)/* && !contains(y, x)*/) {
+              statement(y)
+              y.args[0] = n.op("void", n.op("number", 0))
+            }
+          })
+        } else {
+          pushExpressions(x, isImpure)
+        }
         expressions = []
         statement(x)
         return expression(n.op("void", n.op("number", 0)))
@@ -356,11 +398,12 @@ var NINO = (function (n) {
     })
   }
 
-  function spliceBlock(x, i) {
-    var y = x.args[i]
+  function spliceBlock(w, i) {
+    var x = unwrap(w)
+      , y = unwrap(x.args[i])
     if (y.op === ",") {
       y.args.slice(0, -1).forEach(statement)
-      x.args[i] = y.args[y.args.length - 1]
+      x.args[i] = wrap(x.args[i], y.args[y.args.length - 1])
     }
   }
 
@@ -386,14 +429,19 @@ var NINO = (function (n) {
       expression: function (x) {
         if (o.args == null) {
           if (x.args.length > 2) {
-            // TODO should store the middle expressions so it doesn't recompute them
             if (o.pairwise) {
-              var r = []
               var len = x.args.length - 1
+                , r   = []
+              if (isImpure(x.args[0]) && x.args.slice(1).some(isImpure)) {
+                var u = n.op("unique")
+                statements.push(n.op("var", n.op("=", u, x.args[0])))
+                x.args[0] = u
+              }
               x.args.reduce(function (x, y, i) {
                 if (isImpure(y) && i !== len) {
-                  var u = n.op("box")
-                  r.push(n.op(s, x, n.op("var", n.op("=", u, y))))
+                  var u = n.op("unique")
+                  statements.push(n.op("var", n.op("=", u, y)))
+                  r.push(n.op(s, x, u))
                   return u
                 } else {
                   r.push(n.op(s, x, y))
@@ -429,7 +477,7 @@ var NINO = (function (n) {
       compile: function (x) {
         if (x.args.length === 1) {
           return withPriority(x.unary, function () {
-            var right = x.args[0]
+            var right = unwrap(x.args[0])
 
             if (x.unary === right.unary) {
               if (o.error) {
@@ -444,8 +492,8 @@ var NINO = (function (n) {
           })
         } else {
           return withPriority(x.binary, function () {
-            var left  = x.args[0]
-              , right = x.args[1]
+            var left  = unwrap(x.args[0])
+              , right = unwrap(x.args[1])
 
             if (o.order === "right") {
               if (x.binary === left.binary) {
@@ -481,35 +529,46 @@ var NINO = (function (n) {
     return s2
   }
 
-  function getUniq(x) {
-    var s, i = 1
-    while (true) {
-      for (var a = "a".charCodeAt(0), b = "z".charCodeAt(0); a <= b; ++a) {
-        s = new Array(i + 1).join(String.fromCharCode(a))
-        if (!vars[s]) {
-          vars[s] = true
-          x.string = s
-          return s
-        }
+  function getNextUniq(s, f) {
+    var r = s.split("")
+      , i = r.length
+    while (i--) {
+      if (r[i] === "z") {
+        r[i] = "a"
+      } else {
+        r[i] = String.fromCharCode(r[i].charCodeAt(0) + 1)
+        return r.join("")
       }
-      ++i
     }
+    return r.join("") + "a"
+  }
+
+  function getUniq(x) {
+    var s = "a"
+    while (vars[s]) {
+      s = getNextUniq(s)
+    }
+    vars[s] = true
+    x.string = s
+    return s
   }
 
   function optimizeVar(x, a) {
     var r = []
-    x.forEach(function (x) {
-      var y, z
-      if (x.op === "=" && (y = x.args[1]).op === "function") {
+    x.forEach(function (w) {
+      var x = unwrap(w)
+        , y
+        , z
+      if (x.op === "=" && (y = unwrap(x.args[1])).op === "function") {
         if (r.length) {
           a.push(n.opArray("var", r))
           r = []
         }
         z = n.op("function-var", x.args[0], y.args[0], y.args[1])
         z.scope = y.scope
-        a.push(z)
+        a.push(wrap(w, z))
       } else {
-        r.push(x)
+        r.push(wrap(w, x))
       }
     })
     if (r.length) {
@@ -517,12 +576,13 @@ var NINO = (function (n) {
     }
   }
 
-  function blockWith(x, type) {
-    var old1 = expressions
-      , old2 = statements
+  function blockWith(w, type) {
+    var old  = statements
+      , old2 = expressions
+    statements  = []
     expressions = []
-    statements = []
     try {
+      var x = unwrap(w)
       if (x.op === "," || type === "statement") {
         statement(x)
       } else if (type === "expression") {
@@ -531,18 +591,19 @@ var NINO = (function (n) {
       var a = []
         , r = []
         , seen
-      statements.forEach(function (x) {
+      statements.forEach(function (w) {
+        var x = unwrap(w)
         if (x.op === "var") {
           r = r.concat(x.args)
         } else {
           var b = false
           if (r.length) {
-            var last = r[r.length - 1]
+            var last = unwrap(r[r.length - 1])
             b = (x.op === "=" &&
                  last.isVariable &&
-                 last.args[0] === x.args[0].args[0])
+                 last.args[0] === unwrap(x.args[0]).args[0])
             if (b) {
-              r[r.length - 1] = x
+              r[r.length - 1] = wrap(r[r.length - 1], x)
             }
             optimizeVar(r, a)
             r = []
@@ -556,7 +617,7 @@ var NINO = (function (n) {
             } else if (x.isBreak) {
               seen = true
             }
-            a.push(x)
+            a.push(wrap(w, x))
           }
         }
       })
@@ -564,25 +625,23 @@ var NINO = (function (n) {
         optimizeVar(r, a)
       }
       if (type === "statement") {
-        a = a.map(useless)
+        a.forEach(useless)
       } else if (type === "expression") {
         var len = a.length - 1
-        a = a.map(function (x, i) {
-          if (i === len) {
-            return x
-          } else {
-            return useless(x)
+        a.forEach(function (x, i) {
+          if (i !== len) {
+            useless(x)
           }
         })
       }
       if (a.length === 1) {
-        return a[0]
+        return wrap(w, a[0])
       } else {
-        return n.opArray(";", a)
+        return wrap(w, n.opArray(";", a))
       }
     } finally {
-      expressions = old1
-      statements = old2
+      statements  = old
+      expressions = old2
     }
   }
 
@@ -607,25 +666,25 @@ var NINO = (function (n) {
     ops[s] = info
   }
 
-  function isImpure1(x) {
+  function isImpure(w) {
+    var x = unwrap(w)
     if (x.isImpure) {
       return true
-    } else if (x.isLiteral) {
+    } else if (x.isLiteral || x.isFunction) {
       return false
     } else {
-      return x.args.some(isImpure1)
+      return x.args.some(isImpure)
     }
   }
 
-  function isImpure(x) {
-    if (x.isImpure) {
-      if (x.isImpure === "children") {
-        return x.args.some(isImpure1)
-      } else {
-        return true
-      }
-    } else {
+  function isStatement(w) {
+    var x = unwrap(w)
+    if (x.isStatement) {
+      return true
+    } else if (x.isLiteral || x.isFunction) {
       return false
+    } else {
+      return x.args.some(isStatement)
     }
   }
 
@@ -715,22 +774,34 @@ var NINO = (function (n) {
   return 2
 */
 
-  function expression(x) {
-    if (x.expression) {
-      expressions.push(x)
-      return x.expression(x)
-    } else {
-      return x
-      //throw new Error("\"" + x.op + "\" is not allowed in expression position")
+  function expression(w) {
+    var x = unwrap(w)
+      , y = (x.expression ? x.expression(x) : x)
+    if (!x.isStatement) {
+      y = n.op("wrapper", y)
+      expressions.push(y)
     }
+    return wrap(w, y)
   }
 
-  function statement(x) {
+  function statement(w) {
+    var x = unwrap(w)
     if (x.statement) {
       x.statement(x)
     } else {
-      statements.push(expression(x))
+      statements.push(expression(w))
     }
+  }
+
+  function pushExpressions(x, f) {
+    expressions.forEach(function (y) {
+      if (/*!contains(y, x) && */f(y)) {
+        var u = n.op("unique")
+        statement(n.op("var", n.op("=", u, y.args[0])))
+        y.args[0] = u
+      }
+    })
+    expressions = []
   }
 
   function blockStatement(x) {
@@ -774,7 +845,7 @@ var NINO = (function (n) {
     }
   })
 
-  makeOp("box", {
+  makeOp("unique", {
     isVariable: true,
     isLiteral: true,
     compile: function (x) {
@@ -914,7 +985,8 @@ var NINO = (function (n) {
       } else {
         var r   = []
           , len = x.args.length - 1
-        x.args.forEach(function (x, i) {
+        x.args.forEach(function (w, i) {
+          var x = unwrap(w)
           r.push(compileFn(x))
           if (i !== len) {
             if (!x.noSemicolon) {
@@ -938,11 +1010,11 @@ var NINO = (function (n) {
       } else {
         var len = x.args.length - 1
         x.args = x.args.map(function (x, i) {
-          if (i === len) {
-            return expression(x)
-          } else {
-            return useless(expression(x))
+          x = expression(x)
+          if (i !== len) {
+            useless(x)
           }
+          return x
         })
         return x
       }
@@ -983,9 +1055,11 @@ var NINO = (function (n) {
 
   makeOp("var", {
     isImpure: true,
+    isStatement: true,
     statement: function (x) {
-      if (x.args[0].op === "=") {
-        spliceBlock(x.args[0], 1)
+      var first = unwrap(x.args[0])
+      if (first.op === "=") {
+        spliceBlock(first, 1)
       }
       /* TODO
       x.args.some(function (x) {
@@ -994,29 +1068,72 @@ var NINO = (function (n) {
           return true
         }
       })*/
-      x.args = x.args.map(expression)
+      x.args = x.args.map(function (w) {
+        var x = unwrap(w)
+        if (x.op === "=") {
+          x.args[0] = expression(x.args[0])
+          x.args[1] = expression(x.args[1])
+          return wrap(w, x)
+        } else {
+          return expression(w)
+        }
+      })
+      //x.args = x.args.map(expression)
       statements.push(x)
     },
     expression: function (x) {
-      var top  = []
+      var seen = []
+
+      x.args.forEach(function (w) {
+        var x = unwrap(w)
+        if (x.op === "=") {
+          if (isImpure(x.args[1])) {
+            seen.push(isImpure)
+          }
+          x = x.args[0]
+        }
+        x = unwrap(x)
+        seen.push(function (w) {
+          var y = unwrap(w)
+          return x.op === y.op && x.args[0] === y.args[0]
+        })
+      })
+
+      pushExpressions(x, function (x) {
+        return seen.some(function (f) {
+          return f(x)
+        })
+      })
+
+      var last = unwrap(x.args[x.args.length - 1])
+      if (last.op === "=") {
+        last = last.args[0]
+      }
+
+      statement(x)
+      return expression(last)
+
+
+      /*var top  = []
         , bot  = []
         , seen = {}
         , len  = x.args.length - 1
 
-      x.args.forEach(function (x, i) {
+      x.args.forEach(function (w, i) {
+        var x = unwrap(w)
         if (x.op === "=") {
-          if (isImpure(x.args[1]) || seen[x.args[0].args[0]]) {
-            seen[x.args[0].args[0]] = true
+          if (isImpure(x.args[1]) || seen[unwrap(x.args[0]).args[0]]) {
+            seen[unwrap(x.args[0]).args[0]] = true
             top.push(x.args[0])
-            bot.push(x)
+            bot.push(w)
           } else {
-            top.push(x)
+            top.push(w)
             if (i === len) {
               bot.push(x.args[0])
             }
           }
         } else {
-          top.push(x)
+          top.push(w)
           if (i === len) {
             bot.push(x)
           }
@@ -1024,7 +1141,7 @@ var NINO = (function (n) {
       })
 
       statement(n.opArray("var", top))
-      return expression(n.opArray(",", bot))
+      return expression(n.opArray(",", bot))*/
     },
     compile: function (x) {
       return resetPriority(0, function () { // TODO test this
@@ -1035,34 +1152,36 @@ var NINO = (function (n) {
   })
 
   makeOp("if", {
-    isImpure: "children",
     statement: function (x) {
       spliceBlock(x, 0)
-      if (minified) {
-        statements.push(expression(x))
-      } else {
-        switch (x.args.length) {
-        case 0:
-          throw new Error("\"if\" expected at least 1 argument but got 0")
-        case 1:
-          statement(x.args[0])
-          break
-        case 2:
+      switch (x.args.length) {
+      case 0:
+        throw new Error("\"if\" expected at least 1 argument but got 0")
+      case 1:
+        statement(x.args[0])
+        break
+      case 2:
+        if (isStatement(x.args[1])) {
           x.isExpression = false
           x.args[0] = expression(x.args[0])
           x.args[1] = blockStatement(x.args[1])
           statements.push(x)
-          break
-        default:
+        } else {
+          statements.push(expression(x))
+        }
+        break
+      default:
+        if (x.args.length > 3) {
+          x.args[2] = n.opArray("if", x.args.slice(2))
+        }
+        if (isStatement(x.args[1]) || isStatement(x.args[2])) {
           x.isExpression = false
           x.args[0] = expression(x.args[0])
           x.args[1] = blockStatement(x.args[1])
-          if (x.args.length > 3) {
-            x.args[2] = blockStatement(n.opArray("if", x.args.slice(2)))
-          } else {
-            x.args[2] = blockStatement(x.args[2])
-          }
+          x.args[2] = blockStatement(x.args[2])
           statements.push(x)
+        } else {
+          statements.push(expression(x))
         }
       }
     },
@@ -1073,17 +1192,33 @@ var NINO = (function (n) {
       case 1:
         return expression(x.args[0])
       case 2:
-        return expression(n.op("&&", x.args[0], x.args[1]))
-      default:
-        x.args[0] = expression(x.args[0])
-        x.args[1] = expression(x.args[1])
-        if (x.args.length > 3) {
-          x.args[2] = expression(n.opArray("if", x.args.slice(2)))
+        if (isStatement(x.args[1])) {
+          var u = n.op("unique")
+          x.args[1] = n.op("=", u, x.args[1])
+          statement(n.op("var", u))
+          statement(x)
+          return expression(u)
         } else {
-          x.args[2] = expression(x.args[2])
+          return expression(n.op("&&", x.args[0], x.args[1]))
         }
-        x.isExpression = true
-        return x
+      default:
+        if (x.args.length > 3) {
+          x.args[2] = n.opArray("if", x.args.slice(2))
+        }
+        if (isStatement(x.args[1]) || isStatement(x.args[2])) {
+          var u = n.op("unique")
+          x.args[1] = n.op("=", u, x.args[1])
+          x.args[2] = n.op("=", u, x.args[2])
+          statement(n.op("var", u))
+          statement(x)
+          return expression(u)
+        } else {
+          x.args[0] = expression(x.args[0])
+          x.args[1] = expression(x.args[1])
+          x.args[2] = expression(x.args[2])
+          x.isExpression = true
+          return x
+        }
       }
     },
     compile: function (x) {
@@ -1094,13 +1229,18 @@ var NINO = (function (n) {
                  compile(x.args[2])
         })
       } else {
-        var b1 = (x.args[1].op === ";")
-          , s  = []
+        x.args[1] = unwrap(x.args[1])
+        var b = (x.args[1].op === ";")
+          , s = []
+        if (x.args.length > 2) {
+          x.args[2] = unwrap(x.args[2])
+          b = b || x.args[2].op === ";"
+        }
         s.push("if", minify(" "), "(", compile(x.args[0]), ")", minify(" "))
-        if (b1) {
-          if (x.args.length === 2) {
-            x.noSemicolon = true
-          }
+        if (b) {
+          //if (x.args.length === 2) {
+          x.noSemicolon = true
+          //}
           s.push("{", minify("\n"))
           s.push(block(x.args[1]))
           s.push(minify("\n"), space(), "}")
@@ -1114,15 +1254,13 @@ var NINO = (function (n) {
           }
         }
         if (x.args.length > 2) {
-          if (x.args[2].op === ";") {
-            x.noSemicolon = true
+          if (b) {
+            //x.noSemicolon = true
             s.push("else", minify(" "), "{", minify("\n"))
             s.push(block(x.args[2]))
             s.push(minify("\n"), space(), "}")
           } else {
-            if (!b1) {
-              s.push(space())
-            }
+            s.push(space())
             if (x.args[2].op === "if") {
               s.push("else ", compile(x.args[2]))
             } else {
@@ -1217,6 +1355,7 @@ var NINO = (function (n) {
 
   makeOp("while", {
     isImpure: true, // TODO should this be impure?
+    isStatement: true,
     statement: function (x) {
       spliceBlock(x, 0)
       x.args[0] = expression(x.args[0])
@@ -1224,6 +1363,7 @@ var NINO = (function (n) {
       statements.push(x)
     },
     expression: function (x) {
+      pushExpressions(x, isImpure)
       statement(x)
       return expression(n.op("void", n.op("number", 0)))
     },
@@ -1234,9 +1374,11 @@ var NINO = (function (n) {
 
   makeOp("for", {
     isImpure: true, // TODO
+    isStatement: true,
     statement: function (x) {
-      if (x.args[0].op === "var") {
-        x.args[0] = blockStatement(x.args[0])
+      var first = unwrap(x.args[0])
+      if (first.op === "var") {
+        x.args[0] = wrap(x.args[0], blockStatement(first))
       } else {
         spliceBlock(x, 0)
         x.args[0] = expression(x.args[0])
@@ -1247,14 +1389,16 @@ var NINO = (function (n) {
       statements.push(x)
     },
     expression: function (x) {
+      pushExpressions(x, isImpure)
       statement(x)
       return expression(n.op("void", n.op("number", 0)))
     },
     compile: function (x) {
-      if (x.args[0].op === "var") {
-        x.args[0].isInline = true
+      var first = unwrap(x.args[0])
+      if (first.op === "var") {
+        first.isInline = true
       }
-      return compileLoop(x, "for", compile(x.args[0]) + ";" + minify(" ") +
+      return compileLoop(x, "for", compile(first)     + ";" + minify(" ") +
                                    compile(x.args[1]) + ";" + minify(" ") +
                                    compile(x.args[2]), x.args[3])
     }
@@ -1262,20 +1406,21 @@ var NINO = (function (n) {
 
   makeOp("for-in", {
     isImpure: true, // TODO
+    isStatement: true,
     statement: function (x) {
       spliceBlock(x, 0)
-      var first = x.args[0]
+      var first = unwrap(x.args[0])
       if (first.op !== "var" && !first.isVariable) {
         throw new Error("the first argument for \"for-in\" must be a variable or \"var\" but it was \"" + first.op + "\"")
       }
       if (first.op === "var") {
-        if (first.args.length === 1 && first.args[0].isVariable) {
-          x.args[0] = blockStatement(first)
+        if (first.args.length === 1 && unwrap(first.args[0]).isVariable) {
+          x.args[0] = wrap(x.args[0], blockStatement(first))
         } else {
           throw new Error("invalid assignment for first argument of \"for-in\"")
         }
       } else {
-        x.args[0] = expression(first)
+        x.args[0] = wrap(x.args[0], expression(first))
       }
       spliceBlock(x, 1)
       x.args[1] = expression(x.args[1])
@@ -1283,6 +1428,7 @@ var NINO = (function (n) {
       statements.push(x)
     },
     expression: function (x) {
+      pushExpressions(x, isImpure)
       statement(x)
       return expression(n.op("void", n.op("number", 0)))
     },
@@ -1292,9 +1438,11 @@ var NINO = (function (n) {
   })
 
   makeOp("function", {
+    isFunction: true,
     expression: function (x) {
-      x.args[0].args = x.args[0].args.map(expression)
-      x.args[1]      = blockStatement(x.args[1])
+      var args = unwrap(x.args[0])
+      args.args = args.args.map(expression)
+      x.args[1] = blockStatement(x.args[1])
       return x
     },
     compile: function (x) {
@@ -1304,14 +1452,18 @@ var NINO = (function (n) {
 
   makeOp("function-var", {
     noSemicolon: true,
+    isFunction: true,
     isImpure: true,
+    isStatement: true,
     statement: function (x) {
-      x.args[0]      = expression(x.args[0])
-      x.args[1].args = x.args[1].args.map(expression)
-      x.args[2]      = blockStatement(x.args[2])
+      var args = unwrap(x.args[1])
+      x.args[0] = expression(x.args[0])
+      args.args = args.args.map(expression)
+      x.args[2] = blockStatement(x.args[2])
       statements.push(x)
     },
     expression: function (x) {
+      pushExpressions(x, isImpure) // TODO
       statement(x)
       return expression(x.args[0])
     },
@@ -1322,7 +1474,8 @@ var NINO = (function (n) {
 
   makeOp("try", {
     noSemicolon: true,
-    isImpure: "children",
+    //isImpure: "children", TODO
+    isStatement: true,
     statement: function (x) {
       x.args = x.args.map(function (x, i) {
         if (i === 0) {
@@ -1334,16 +1487,19 @@ var NINO = (function (n) {
       statements.push(x)
     },
     expression: function (x) {
-      var u = n.op("box")
+      pushExpressions(x, isImpure)
 
-      x.args = x.args.map(function (x, i) {
+      var u = n.op("unique")
+
+      x.args = x.args.map(function (w, i) {
+        var x = unwrap(w)
         if (i === 0) {
-          return blockStatement(n.op("=", u, x))
+          return wrap(w, blockStatement(n.op("=", u, x)))
         } else if (x.op === "catch") {
           x.args[1] = n.op("=", u, x.args[1])
-          return expression(x)
+          return wrap(w, expression(x))
         } else if (x.op === "finally") {
-          return expression(x)
+          return wrap(w, expression(x))
         }
       })
       statement(n.op("var", u))
@@ -1379,9 +1535,12 @@ var NINO = (function (n) {
     }
   })
 
+  makeOp("wrapper", {})
+
   makeOp("bypass", {
     isImpure: true, // TODO
     isLiteral: true,
+    isStatement: true, // TODO
     compile: function (x) {
       return "" + x.args[0]
     }
@@ -1389,13 +1548,12 @@ var NINO = (function (n) {
 
   /*makeOp("switch", {
     noSemicolon: true,
-    isImpure: "children",
     statement: function (x) {
       x.args = x.args.map(expression)
       statements.push(x)
     },
     expression: function (x) {
-      var u = n.op("box")
+      var u = n.op("unique")
 
       x.args = x.args.map(function (x, i) {
         if (i !== 0) {

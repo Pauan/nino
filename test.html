@@ -5,9 +5,9 @@
     <script>
       var scope = {}
 
-      var a = NINO.op("box", "a")
-        , b = NINO.op("box", "b")
-        , c = NINO.op("box", "c")
+      var a = NINO.op("unique", "a")
+        , b = NINO.op("unique", "b")
+        , c = NINO.op("unique", "c")
 
       function expr(a) {
         a.map(function (x) {
@@ -35,6 +35,8 @@
         ["&&", 1, 2, 3, 4],
 
         ["===", 1, 2, 3],
+
+        ["===", 1, ["call", 2, 3], 4],
 
         ["===", ["call", 1, 2], 2, 3],
 
@@ -237,12 +239,12 @@
           [",", a,
                 ["var", ["=", a, 10]]]],
 
-        ["var", ["=", a, ["function", [","], ["return", NINO.op("box", "d")]]]],
+        ["var", ["=", a, ["function", [","], ["return", ["unique", "d"]]]]],
 
         [",", ["var", a],
-              ["=", a, ["function", [","], ["return", NINO.op("box", "d")]]]],
+              ["=", a, ["function", [","], ["return", ["unique", "d"]]]]],
 
-        ["function-var", a, [","], ["return", NINO.op("box", "d")]],
+        ["function-var", a, [","], ["return", ["unique", "d"]]],
 
         ["try", 1, ["catch", a, 2], ["finally", 3]],
 
@@ -334,56 +336,117 @@
 
         ["+", a, b],
 
-        ["+", NINO.op("symbol", "hiya"), NINO.op("symbol", "a")],
+        ["+", ["symbol", "hiya"], ["symbol", "a"]],
 
-        ["+", NINO.op("box", "a"), NINO.op("box", "b")],
+        ["+", ["unique", "a"], ["unique", "b"]],
 
         (function () {
-          var a = NINO.op("box", "a")
+          var a = NINO.op("unique", "a")
           return ["function", [",", a],
-                   ["+", a, NINO.op("symbol", "a")]]
+                   ["+", a, ["symbol", "a"]]]
         })(),
 
-        ["function", [",", NINO.op("symbol", "b")],
-          ["+", NINO.op("box", "b"), NINO.op("symbol", "b")]],
+        ["function", [",", ["symbol", "b"]],
+          ["+", ["unique", "b"], ["symbol", "b"]]],
 
-        ["function", [",", NINO.op("symbol", "a")],
-          ["return", ["function", [",", NINO.op("symbol", "b")],
-                       ["+", NINO.op("symbol", "a"), NINO.op("symbol", "b")]]]],
-
-        ["function", [","],
-          [",", ["try", 1,
-                  ["catch", NINO.op("symbol", "TEST"),
-                    ["var", ["=", NINO.op("symbol", "yes"), 5]]]],
-                ["+", NINO.op("box", "yes"), NINO.op("box", "TEST")]]],
+        ["function", [",", ["symbol", "a"]],
+          ["return", ["function", [",", ["symbol", "b"]],
+                       ["+", ["symbol", "a"], ["symbol", "b"]]]]],
 
         ["function", [","],
           [",", ["try", 1,
-                  ["catch", NINO.op("symbol", "TEST"),
-                    NINO.op("box", "TEST")]],
-                NINO.op("box", "TEST")]],
+                  ["catch", ["symbol", "TEST"],
+                    ["var", ["=", ["symbol", "yes"], 5]]]],
+                ["+", ["unique", "yes"], ["unique", "TEST"]]]],
 
-        ["+", NINO.op("box", "b"), 1],
+        ["function", [","],
+          [",", ["try", 1,
+                  ["catch", ["symbol", "TEST"],
+                    ["unique", "TEST"]]],
+                ["unique", "TEST"]]],
 
-        ["function-var", NINO.op("symbol", "foo"), [","],
+        ["+", ["unique", "b"], 1],
+
+        ["function-var", ["symbol", "foo"], [","],
           ["return", 1]],
 
-        ["+", NINO.op("box", "foo"), 1],
+        ["+", ["unique", "foo"], 1],
 
-        NINO.op("symbol", "50fooBar-qux"),
-        NINO.op("symbol", "break"),
-        NINO.op("symbol", "NaN"),
-        NINO.op("box", "arguments"),
-        NINO.op("symbol", "_arguments"),
-        NINO.op("symbol", "_"),
+        ["symbol", "50fooBar-qux"],
+        ["symbol", "break"],
+        ["symbol", "NaN"],
+        ["unique", "arguments"],
+        ["symbol", "_arguments"],
+        ["symbol", "_"],
 
-        [",", NINO.op("bypass", "var YESNOTESTINGHAHAHA = 5"),
+        [",", ["bypass", "var YESNOTESTINGHAHAHA = 5"],
               ["+", 5, 20]],
 
-        ["+", 1, ["var", ["=", NINO.op("symbol", "a"), 2]]],
+        ["+", 1, ["var", ["=", ["symbol", "a"], 2]]],
 
         ["function", [","],
           [",", ["return", 1], 2]],
+
+        ["function", [","],
+          ["return", ["if", 1, 2, 3]]],
+
+        ["function", [","],
+          ["return", ["if", ["return", 1], 2, 3]]],
+
+        ["function", [","],
+          ["return", ["if", 1, ["return", 2]]]],
+
+        ["function", [","],
+          ["return", ["if", 1, ["return", 2], ["return", 3]]]],
+
+        ["function", [","],
+          ["return", ["if", 1, ["try", 2, ["finally", 3]], 4]]],
+
+        ["function", [","],
+          ["if", 1, 2]],
+
+        ["function", [","],
+          ["if", 1, 2, 3]],
+
+        ["function", [","],
+          ["if", 1, ["throw", 2], ["throw", 3]]],
+
+        ["function", [","],
+          ["if", 1, ["throw", 2]]],
+
+        ["function", [","],
+          ["if", 1, ["try", 2, ["finally", 3]], 4]],
+
+        ["call", ["call", 1, 2], ["try", 3, ["finally", 4]], ["call", 5, 6]],
+
+
+        ["+", ["call", 1, 2], ["throw", 3]],
+        ["+", ["call", 1, 2], ["debugger"]],
+        ["+", ["call", 1, 2], ["try", 3, ["finally", 4]], ["throw", 3]],
+        ["+", ["call", 1, 2], ["try", 3, ["finally", 4]]],
+        ["+", ["call", 1, 2], ["while", 3, 4]],
+        ["+", ["call", 1, 2], ["var", ["=", ["symbol", "a"], ["call", 3, 4]]]],
+
+        ["+", ["call", 1, 2], ["var", ["=", ["symbol", "a"], ["function", [","], ["return", 3]]]]],
+
+        ["+", ["call", ["symbol", "a"]],
+              ["var", ["=", ["symbol", "a"], 3]]],
+
+        ["+", ["+", ["call", ["symbol", "b"]], 2],
+              ["var", ["=", ["symbol", "a"], ["call", 3, 4]]]],
+
+        ["+", ["symbol", "a"],
+              ["var", ["=", ["symbol", "a"], 3]]],
+
+        ["+", ["+", ["symbol", "a"], 2],
+              ["var", ["=", ["symbol", "a"], 3]]],
+
+        ["+", ["symbol", "b"],
+              ["var", ["=", ["symbol", "a"], 3]]],
+
+
+        ["=", a, ["=", b, ["=", c, 1]]],
+        ["=", a, b, c, 1],
       ])
 
       /*expr(["switch", 1,
