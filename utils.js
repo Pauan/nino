@@ -8,12 +8,12 @@ var NINO = (function (n) {
       /*n.tokenUpdate(o, function (o) {
         o.type = "error"
       })*/
-      var b1 = o.start && ("line"   in o.start)
-        , b2 = o.start && ("column" in o.start)
-      if ("text" in o || b1 || b2) {
+      var b1 = o.start && o.start.line != null
+        , b2 = o.start && o.start.column != null
+      if (o.text != null || b1 || b2) {
         var iOffset = 0
         a.push("\n")
-        if ("text" in o) {
+        if (o.text != null) {
           a.push("  ", o.text.replace(/^( +)|\n$/g, function (_, s1) {
             if (s1) {
               iOffset = s1.length
@@ -34,7 +34,7 @@ var NINO = (function (n) {
           }
           a.push(")")
         }
-        if ("text" in o && b2) {
+        if (o.text != null && b2) {
           // TODO: make it work for multi-line tokens
           a.push("\n ", new Array(o.start.column - iOffset + 1).join(" "),
                         new Array((o.end.column - o.start.column) + 1).join("^"))
