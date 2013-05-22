@@ -7,7 +7,7 @@ First, you must create a Nino AST by calling the ``NINO.op``, ``NINO.opArray``, 
   var code = NINO.opArray("+", [...])
   var code = NINO.fromJSON(["+", ...])
 
-To see which operators are defined, just search for ``makeOp`` in the file ``compile.js``. They generally follow JavaScript names and semantics.
+To see which operators are defined, just search for ``n.makeOp`` in the files ``compile.js`` and ``literals.js``. They generally follow JavaScript names and semantics.
 
 Now that you have an AST, you need to pass it to the ``NINO.traverse`` function [#traverse]_ along with a scope, which is simply an object that says which global variables are defined::
 

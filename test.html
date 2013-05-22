@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
   <body>
+    <script src="literals.js"></script>
     <script src="compile.js"></script>
     <script>
       var scope = {}
@@ -448,15 +449,16 @@
         ["=", a, ["=", b, ["=", c, 1]]],
         ["=", a, b, c, 1],
 
-        ["single-comment", "foobarquxcorge"],
-        ["multi-comment", "testing*/\ntesting\ntesting"],
+        ["line-comment", "foobarquxcorge"],
+        ["block-comment", "testing*/\ntesting\ntesting"],
+        ["doc-comment", "testing*/\ntesting\ntesting"],
 
-        [",", ["multi-comment", "testing*/\ntesting\ntesting"],
+        [",", ["block-comment", "testing*/\ntesting\ntesting"],
               ["call", 1, 2]],
 
         ["function", [","],
-          [",", ["multi-comment", "documentation goes here"],
-                ["single-comment", "documentation goes here"],
+          [",", ["block-comment", "documentation goes here"],
+                ["line-comment", "documentation goes here"],
                 ["return", 2]]],
       ])
 

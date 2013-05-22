@@ -1,32 +1,19 @@
 var NINO = (function (n) {
   "use strict"
 
-  n.opArray = function (s, args) {
-    if (ops[s] == null) {
-      throw new Error("unknown operator: " + s)
-    }
-    var o = Object.create(ops[s])
-    o.args = args
-    return o
-  }
-
-  n.op = function (s) {
-    return n.opArray(s, [].slice.call(arguments, 1))
-  }
-
-  n.fromJSON = function (x) {
-    if (typeof x === "number") {
-      return n.op("number", x)
-    } else if (typeof x === "string") {
-      return n.op("string", x)
-    } else if (x.op === "wrapper") {
-      return wrap(x, n.fromJSON(x.args[0]))
-    } else if (x.isLiteral) {
-      return x
-    } else if (ops[x[0]].isLiteral) {
-      return n.opArray(x[0], x.slice(1))
+  n.space = function () {
+    if (n.minified) {
+      return ""
     } else {
-      return n.opArray(x[0], x.slice(1).map(n.fromJSON))
+      return new Array((indent * 2) + 1).join(" ")
+    }
+  }
+
+  n.minify = function (s, s2) {
+    if (n.minified) {
+      return s2 || ""
+    } else {
+      return s
     }
   }
 
@@ -43,11 +30,16 @@ var NINO = (function (n) {
     if (info.warnings == null) {
       info.warnings = true
     }
-    minified = info.minified
     warnings = info.warnings
-    return withVars(scope, function () {
-      return compileFn(blockWith(x, info.type))
-    })
+    var old = n.minified
+    n.minified = info.minified
+    try {
+      return withVars(scope, function () {
+        return compileFn(blockWith(x, info.type))
+      })
+    } finally {
+      n.minified = old
+    }
   }
 
   n.traverse = function (x, scope) {
@@ -172,67 +164,10 @@ var NINO = (function (n) {
 
   var indent   = 0
     , priority = 0
-    , ops      = {}
     , scope    = { loop: false, function: false }
-    , vars
-    , minified
     , warnings
     , statements
     , expressions
-
-  var reserved = {}
-
-  // https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Reserved_Words
-  ;("break case catch continue debugger default delete do else finally for function if in instanceof new return switch this throw try typeof var void while with " +
-    "class enum export extends import super " +
-    "implements interface let package private protected public static yield " +
-    "null true false").split(" ").forEach(function (s) {
-    reserved[s] = true
-  })
-
-  /*
-  Object.getOwnPropertyNames(window).forEach(function (s) {
-    if (!Object.getOwnPropertyDescriptor(window, s).writable) {
-      console.log(s)
-    }
-  })
-  */
-
-  function mangle(s) {
-    if (reserved[s]) {
-      return "_" + s
-    } else {
-      return s.replace(/^([0-9])|([a-z])\-([a-z])|[^$a-zA-Z0-9]/g, function (s, s1, s2, s3) {
-        if (s1) {
-          return "_" + s1
-        } else if (s2) {
-          return s2 + s3.toLocaleUpperCase()
-        } else {
-          return s === "_" ? "__" : "_" + s.charCodeAt(0) + "_"
-        }
-      })
-    }
-  }
-
-  /*function unmangle(s) {
-    // |([a-z])([A-Z])
-    return s.replace(/_([0-9]*)_|^_([a-z0-9])/g, function (_, s, s1) {
-      if (s1) {
-        return s1
-      } else {
-        return s === "" ? "_" : String.fromCharCode(s)
-      }
-    })
-  }*/
-
-  function mangleBox(s) {
-    // TODO: document isn't writable either, but should probably be handled in a different way
-    if (s === "undefined" || s === "NaN" || s === "Infinity" || s === "arguments") {
-      return "_" + s
-    } else {
-      return mangle(s)
-    }
-  }
 
   // mangle("50fooBar-qux")
 
@@ -250,8 +185,11 @@ var NINO = (function (n) {
 
   function jsProp(w) {
     var x = unwrap(w)
-    if (x.op === "string" && /^[$_a-zA-Z][$_a-zA-Z0-9]*$/.test(x.args[0])) {
-      return x.args[0]
+    if (x.op === "string") {
+      var y = x.args[0]
+      if (/^[$_a-zA-Z][$_a-zA-Z0-9]*$/.test(y)) {
+        return y
+      }
     }
   }
 
@@ -277,7 +215,7 @@ var NINO = (function (n) {
       , s = x.compile(x)
     if (x.isUseless && warnings) {
       if (/\n/.test(s)) {
-        console.warn("useless expression:\n" + space() + s)
+        console.warn("useless expression:\n" + n.space() + s)
       } else {
         console.warn("useless expression: " + s)
       }
@@ -299,12 +237,12 @@ var NINO = (function (n) {
       return withVars(scope, function () {
         // n.changeScope(this.scope)
         return withScope("function", function () {
-          args = unwrap(args).args.map(compile).join("," + minify(" "))
+          args = unwrap(args).args.map(compile).join("," + n.minify(" "))
           body = block(body)
-          return "function" + (name ? " " + name : minify(" ")) + "(" +
-                   args + ")" + minify(" ") +
-                   "{" + minify("\n") +
-                     body + minify("\n") + space() +
+          return "function" + (name ? " " + name : n.minify(" ")) + "(" +
+                   args + ")" + n.minify(" ") +
+                   "{" + n.minify("\n") +
+                     body + n.minify("\n") + n.space() +
                    "}"
         })
       })
@@ -313,8 +251,8 @@ var NINO = (function (n) {
 
   function compileBlock(name, test, body) {
     return resetPriority(0, function () {
-      return name + minify(" ") + test + "{" + minify("\n") +
-               block(body) + minify("\n") + space() +
+      return name + n.minify(" ") + test + "{" + n.minify("\n") +
+               block(body) + n.minify("\n") + n.space() +
                "}"
     })
   }
@@ -324,10 +262,10 @@ var NINO = (function (n) {
       body = unwrap(body)
       if (body.op === ";") {
         unwrap(x).noSemicolon = true
-        return compileBlock(name, "(" + test + ")" + minify(" "), body)
+        return compileBlock(name, "(" + test + ")" + n.minify(" "), body)
       } else {
         return resetPriority(0, function () {
-          return name + minify(" ") + "(" + test + ")" + minify("\n") + block(body)
+          return name + n.minify(" ") + "(" + test + ")" + n.minify("\n") + block(body)
         })
       }
     })
@@ -354,7 +292,7 @@ var NINO = (function (n) {
   }*/
 
   function stmt(s, isBreak, f) {
-    makeOp(s, {
+    n.makeOp(s, {
       isImpure: true,
       isStatement: true,
       isBreak: isBreak,
@@ -409,7 +347,7 @@ var NINO = (function (n) {
 
   function op(s, o) {
     var s2 = o.name || s
-    makeOp(s, {
+    n.makeOp(s, {
       unary: o.unary,
       binary: o.binary,
       isImpure: o.isImpure,
@@ -499,7 +437,7 @@ var NINO = (function (n) {
               if (x.binary === left.binary) {
                 throw new Error("invalid left hand side for assignment: (" +
                                 compile(left) + ")" +
-                                minify(" ") + s2 + minify(" ") +
+                                n.minify(" ") + s2 + n.minify(" ") +
                                 compile(right))
               }
             } else if (x.binary === right.binary) {
@@ -509,48 +447,12 @@ var NINO = (function (n) {
             }
 
             return compileFn(left) +
-                   minify(" ") + s2 + minify(" ") +
+                   n.minify(" ") + s2 + n.minify(" ") +
                    compile(right)
           })
         }
       }
     })
-  }
-
-  function getBox(x, s) {
-    var s2 = s
-      , i  = 2
-    while (vars[s2]) {
-      s2 = s + i
-      ++i
-    }
-    vars[s2] = true
-    x.string = s2
-    return s2
-  }
-
-  function getNextUniq(s, f) {
-    var r = s.split("")
-      , i = r.length
-    while (i--) {
-      if (r[i] === "z") {
-        r[i] = "a"
-      } else {
-        r[i] = String.fromCharCode(r[i].charCodeAt(0) + 1)
-        return r.join("")
-      }
-    }
-    return r.join("") + "a"
-  }
-
-  function getUniq(x) {
-    var s = "a"
-    while (vars[s]) {
-      s = getNextUniq(s)
-    }
-    vars[s] = true
-    x.string = s
-    return s
   }
 
   function optimizeVar(x, a) {
@@ -645,27 +547,6 @@ var NINO = (function (n) {
     }
   }
 
-  function space() {
-    if (minified) {
-      return ""
-    } else {
-      return new Array((indent * 2) + 1).join(" ")
-    }
-  }
-
-  function minify(s, s2) {
-    if (minified) {
-      return s2 || ""
-    } else {
-      return s
-    }
-  }
-
-  function makeOp(s, info) {
-    info.op = s
-    ops[s] = info
-  }
-
   function isImpure(w) {
     var x = unwrap(w)
     if (x.isImpure) {
@@ -688,13 +569,14 @@ var NINO = (function (n) {
     }
   }
 
+  // TODO rename
   function withVars(x, f) {
-    var old = vars
-    vars = x
+    var old = n.scope
+    n.scope = x
     try {
       return f()
     } finally {
-      vars = old
+      n.scope = old
     }
   }
 
@@ -830,92 +712,14 @@ var NINO = (function (n) {
 
   function block(x) {
     return withIndent(indent + 1, function () {
-      return space() + compileFn(x)
+      return n.space() + compileFn(x)
     })
   }
 
   /**
    *  Operators
    */
-  makeOp("symbol", {
-    isVariable: true,
-    isLiteral: true,
-    compile: function (x) {
-      return mangle(x.args[0])
-    }
-  })
-
-  makeOp("unique", {
-    isVariable: true,
-    isLiteral: true,
-    compile: function (x) {
-      if (x.string) {
-        return mangleBox(x.string)
-      } else if (x.args[0] && !minified) {
-        return mangleBox(getBox(x, x.args[0]))
-      } else {
-        return getUniq(x)
-      }
-    }
-  })
-
-  makeOp("true", {
-    isLiteral: true,
-    compile: function () {
-      return "true"
-    }
-  })
-
-  makeOp("false", {
-    isLiteral: true,
-    compile: function () {
-      return "false"
-    }
-  })
-
-  makeOp("null", {
-    isLiteral: true,
-    compile: function () {
-      return "null"
-    }
-  })
-
-  makeOp("number", {
-    isLiteral: true,
-    compile: function (x) {
-      return x.args[0]
-    }
-  })
-
-  makeOp("string", {
-    isLiteral: true,
-    compile: function (x) {
-      return "\"" + x.args[0].replace(/["\\\b\f\n\r\t\v]/g, function (s) {
-        if (s === "\"" || s === "\\") {
-          return "\\" + s
-        } else if (s === "\b") {
-          return "\\b"
-        } else if (s === "\f") {
-          return "\\f"
-        } else if (s === "\n") {
-          return "\\n"
-        } else if (s === "\r") {
-          return "\\r"
-        } else if (s === "\t") {
-          return "\\t"
-        } else if (s === "\v") {
-          return "\\v"
-        }
-      }) + "\""
-    }
-  })
-
-  makeOp("regexp", {
-    isLiteral: true,
-    compile: function (x) {
-      return "/" + x.args[0].replace(/[\/\\]/g, "\\$&") + "/"
-    }
-  })
+  n.makeOp("wrapper", {})
 
   op("++",         { unary:  75, args: 1, isImpure: true, error: true })
   op("--",         { unary:  75, args: 1, isImpure: true, error: true })
@@ -978,7 +782,7 @@ var NINO = (function (n) {
     }
   })
 
-  makeOp(";", {
+  n.makeOp(";", {
     compile: function (x) {
       if (x.args.length === 0) {
         throw new Error("\",\" expected at least 1 argument but got 0")
@@ -992,7 +796,7 @@ var NINO = (function (n) {
             if (!x.noSemicolon) {
               r.push(";")
             }
-            r.push(minify("\n") + space())
+            r.push(n.minify("\n") + n.space())
           }
         })
         return r.join("")
@@ -1000,7 +804,7 @@ var NINO = (function (n) {
     }
   })
 
-  makeOp(",", {
+  n.makeOp(",", {
     statement: function (x) {
       x.args.forEach(statement)
     },
@@ -1030,13 +834,13 @@ var NINO = (function (n) {
             } else {
               return compile(x)
             }
-          }).join("," + minify(" "))
+          }).join("," + n.minify(" "))
         })
       }
     }
   })
 
-  makeOp(".", {
+  n.makeOp(".", {
     expression: function (x) {
       x.args = x.args.map(expression)
       return x
@@ -1053,7 +857,7 @@ var NINO = (function (n) {
     }
   })
 
-  makeOp("var", {
+  n.makeOp("var", {
     isImpure: true,
     isStatement: true,
     statement: function (x) {
@@ -1145,13 +949,13 @@ var NINO = (function (n) {
     },
     compile: function (x) {
       return resetPriority(0, function () { // TODO test this
-        var s = minify(x.isInline ? " " : "\n" + space() + "    ")
+        var s = n.minify(x.isInline ? " " : "\n" + n.space() + "    ")
         return "var " + x.args.map(compile).join("," + s)
       })
     }
   })
 
-  makeOp("if", {
+  n.makeOp("if", {
     statement: function (x) {
       spliceBlock(x, 0)
       switch (x.args.length) {
@@ -1224,8 +1028,8 @@ var NINO = (function (n) {
     compile: function (x) {
       if (x.isExpression) {
         return withPriority(15, function () {
-          return compileFn(x.args[0]) + minify(" ") + "?" + minify(" ") +
-                 compile(x.args[1])   + minify(" ") + ":" + minify(" ") +
+          return compileFn(x.args[0]) + n.minify(" ") + "?" + n.minify(" ") +
+                 compile(x.args[1])   + n.minify(" ") + ":" + n.minify(" ") +
                  compile(x.args[2])
         })
       } else {
@@ -1236,35 +1040,35 @@ var NINO = (function (n) {
           x.args[2] = unwrap(x.args[2])
           b = b || x.args[2].op === ";"
         }
-        s.push("if", minify(" "), "(", compile(x.args[0]), ")", minify(" "))
+        s.push("if", n.minify(" "), "(", compile(x.args[0]), ")", n.minify(" "))
         if (b) {
           //if (x.args.length === 2) {
           x.noSemicolon = true
           //}
-          s.push("{", minify("\n"))
+          s.push("{", n.minify("\n"))
           s.push(block(x.args[1]))
-          s.push(minify("\n"), space(), "}")
+          s.push(n.minify("\n"), n.space(), "}")
           if (x.args.length > 2) {
-            s.push(minify(" "))
+            s.push(n.minify(" "))
           }
         } else {
-          s.push(minify("\n"), block(x.args[1]))
+          s.push(n.minify("\n"), block(x.args[1]))
           if (x.args.length > 2) {
-            s.push(";", minify("\n"))
+            s.push(";", n.minify("\n"))
           }
         }
         if (x.args.length > 2) {
           if (b) {
             //x.noSemicolon = true
-            s.push("else", minify(" "), "{", minify("\n"))
+            s.push("else", n.minify(" "), "{", n.minify("\n"))
             s.push(block(x.args[2]))
-            s.push(minify("\n"), space(), "}")
+            s.push(n.minify("\n"), n.space(), "}")
           } else {
-            s.push(space())
+            s.push(n.space())
             if (x.args[2].op === "if") {
               s.push("else ", compile(x.args[2]))
             } else {
-              s.push("else", minify("\n", " "), block(x.args[2]))
+              s.push("else", n.minify("\n", " "), block(x.args[2]))
             }
           }
         }
@@ -1273,7 +1077,7 @@ var NINO = (function (n) {
     }
   })
 
-  makeOp("call", {
+  n.makeOp("call", {
     isImpure: true,
     statement: function (x) {
       spliceBlock(x, 0)
@@ -1288,13 +1092,13 @@ var NINO = (function (n) {
         return compileFn(x.args[0]) + "(" +
                // TODO: don't hardcode 6
                resetPriority(6, function () {
-                 return x.args.slice(1).map(compile).join("," + minify(" "))
+                 return x.args.slice(1).map(compile).join("," + n.minify(" "))
                }) + ")"
       })
     }
   })
 
-  makeOp("new", {
+  n.makeOp("new", {
     isImpure: true,
     statement: function (x) {
       spliceBlock(x, 0)
@@ -1309,13 +1113,13 @@ var NINO = (function (n) {
         return "new " + compile(x.args[0]) + "(" +
                // TODO: don't hardcode 6
                resetPriority(6, function () {
-                 return x.args.slice(1).map(compile).join("," + minify(" "))
+                 return x.args.slice(1).map(compile).join("," + n.minify(" "))
                }) + ")"
       })
     }
   })
 
-  makeOp("array", {
+  n.makeOp("array", {
     expression: function (x) {
       x.args = x.args.map(expression)
       return x
@@ -1323,12 +1127,12 @@ var NINO = (function (n) {
     compile: function (x) {
       // TODO don't hardcode 6
       return resetPriority(6, function () {
-        return "[" + x.args.map(compile).join("," + minify(" ")) + "]"
+        return "[" + x.args.map(compile).join("," + n.minify(" ")) + "]"
       })
     }
   })
 
-  makeOp("object", {
+  n.makeOp("object", {
     expression: function (x) {
       x.args = x.args.map(expression)
       return x
@@ -1339,13 +1143,13 @@ var NINO = (function (n) {
         var r = []
         withIndent(indent + 1, function () {
           for (var i = 0, iLen = x.args.length; i < iLen; i += 2) {
-            r.push(minify("\n") + space() +
-                   (jsProp(x.args[i]) || compile(x.args[i])) + ":" + minify(" ") +
+            r.push(n.minify("\n") + n.space() +
+                   (jsProp(x.args[i]) || compile(x.args[i])) + ":" + n.minify(" ") +
                    compile(x.args[i + 1]))
           }
         })
         if (r.length) {
-          return "{" + r.join(",") + minify("\n") + space() + "}"
+          return "{" + r.join(",") + n.minify("\n") + n.space() + "}"
         } else {
           return "{}"
         }
@@ -1353,7 +1157,7 @@ var NINO = (function (n) {
     }
   })
 
-  makeOp("while", {
+  n.makeOp("while", {
     isImpure: true, // TODO should this be impure?
     isStatement: true,
     statement: function (x) {
@@ -1372,7 +1176,7 @@ var NINO = (function (n) {
     }
   })
 
-  makeOp("for", {
+  n.makeOp("for", {
     isImpure: true, // TODO
     isStatement: true,
     statement: function (x) {
@@ -1398,13 +1202,13 @@ var NINO = (function (n) {
       if (first.op === "var") {
         first.isInline = true
       }
-      return compileLoop(x, "for", compile(first)     + ";" + minify(" ") +
-                                   compile(x.args[1]) + ";" + minify(" ") +
+      return compileLoop(x, "for", compile(first)     + ";" + n.minify(" ") +
+                                   compile(x.args[1]) + ";" + n.minify(" ") +
                                    compile(x.args[2]), x.args[3])
     }
   })
 
-  makeOp("for-in", {
+  n.makeOp("for-in", {
     isImpure: true, // TODO
     isStatement: true,
     statement: function (x) {
@@ -1437,7 +1241,7 @@ var NINO = (function (n) {
     }
   })
 
-  makeOp("function", {
+  n.makeOp("function", {
     isFunction: true,
     expression: function (x) {
       var args = unwrap(x.args[0])
@@ -1450,7 +1254,7 @@ var NINO = (function (n) {
     }
   })
 
-  makeOp("function-var", {
+  n.makeOp("function-var", {
     noSemicolon: true,
     isFunction: true,
     isImpure: true,
@@ -1472,7 +1276,7 @@ var NINO = (function (n) {
     }
   })
 
-  makeOp("try", {
+  n.makeOp("try", {
     noSemicolon: true,
     //isImpure: "children", TODO
     isStatement: true,
@@ -1509,23 +1313,23 @@ var NINO = (function (n) {
     },
     compile: function (x) {
       return compileBlock("try", "", x.args[0]) + x.args.slice(1).map(function (x) {
-               return minify(" ") + compile(x)
+               return n.minify(" ") + compile(x)
              }).join("")
     }
   })
 
-  makeOp("catch", {
+  n.makeOp("catch", {
     expression: function (x) {
       x.args[0] = expression(x.args[0])
       x.args[1] = blockStatement(x.args[1])
       return x
     },
     compile: function (x) {
-      return compileBlock("catch", "(" + compile(x.args[0]) + ")" + minify(" "), x.args[1])
+      return compileBlock("catch", "(" + compile(x.args[0]) + ")" + n.minify(" "), x.args[1])
     }
   })
 
-  makeOp("finally", {
+  n.makeOp("finally", {
     expression: function (x) {
       x.args[0] = blockStatement(x.args[0])
       return x
@@ -1535,42 +1339,7 @@ var NINO = (function (n) {
     }
   })
 
-  makeOp("wrapper", {})
-
-  makeOp("bypass", {
-    isImpure: true, // TODO
-    isLiteral: true,
-    isStatement: true, // TODO
-    compile: function (x) {
-      return "" + x.args[0]
-    }
-  })
-
-  makeOp("single-comment", {
-    isUseful: true,
-    noSemicolon: true,
-    isLiteral: true,
-    compile: function (x) {
-      return "// " + x.args[0]
-    }
-  })
-
-  makeOp("multi-comment", {
-    isUseful: true,
-    noSemicolon: true,
-    isLiteral: true,
-    compile: function (x) {
-      return "/**\n" + space() + " * " + x.args[0].replace(/\*\/|\n/g, function (s) {
-        if (s === "\n") {
-          return "\n" + space() + " * "
-        } else {
-          return "* /"
-        }
-      }) + "\n" + space() + " */"
-    }
-  })
-
-  /*makeOp("switch", {
+  /*n.makeOp("switch", {
     noSemicolon: true,
     statement: function (x) {
       x.args = x.args.map(expression)
@@ -1596,42 +1365,42 @@ var NINO = (function (n) {
     },
     compile: function (x) {
       return withScope("loop", function () {
-        return "switch" + minify(" ") + "(" + compile(x.args[0]) + ")" + minify(" ") +
-                 "{" + minify("\n") + x.args.slice(1).map(compile).join(";" + minify("\n")) +
-                 minify("\n") + "}"
+        return "switch" + n.minify(" ") + "(" + compile(x.args[0]) + ")" + n.minify(" ") +
+                 "{" + n.minify("\n") + x.args.slice(1).map(compile).join(";" + n.minify("\n")) +
+                 n.minify("\n") + "}"
       })
     }
   })
 
-  makeOp("case", {
+  n.makeOp("case", {
     expression: function (x) {
       x.args[0] = expression(x.args[0])
       x.args[1] = blockStatement(x.args[1])
       return x
     },
     compile: function (x) {
-      return "case " + compile(x.args[0]) + ":" + minify("\n") + block(x.args[1])
+      return "case " + compile(x.args[0]) + ":" + n.minify("\n") + block(x.args[1])
     }
   })
 
-  makeOp("fallthru", {
+  n.makeOp("fallthru", {
     expression: function (x) {
       x.args[0] = expression(x.args[0])
       x.args[1] = blockStatement(x.args[1])
       return x
     },
     compile: function (x) {
-      return "case " + compile(x.args[0]) + ":" + minify("\n") + block(x.args[1])
+      return "case " + compile(x.args[0]) + ":" + n.minify("\n") + block(x.args[1])
     }
   })
 
-  makeOp("default", {
+  n.makeOp("default", {
     expression: function (x) {
       x.args[0] = blockStatement(x.args[0])
       return x
     },
     compile: function (x) {
-      return "default:" + minify("\n") + block(x.args[0])
+      return "default:" + n.minify("\n") + block(x.args[0])
     }
   })*/
 
