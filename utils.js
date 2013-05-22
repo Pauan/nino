@@ -112,8 +112,21 @@ var NINO = (function (n) {
     }
   }
 
-  //
-  n.cloneBuffer = function (x) {
+  n.store = function (o) {
+    return { text:   o.text
+           , line:   o.line
+           , column: o.column }
+  }
+
+  n.enrich = function (x, y, z) {
+    x.text  = y.text
+    x.start = { line: y.line, column: y.column }
+    if (z != null) {
+      x.end = { line: z.line, column: z.column }
+    } else {
+      x.end = { line: y.line, column: y.column }
+    }
+    return x
   }
 
   return n
