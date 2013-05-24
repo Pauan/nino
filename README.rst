@@ -7,7 +7,7 @@ First, you must create a Nino AST by calling the ``NINO.op``, ``NINO.opArray``, 
   var code = NINO.opArray("+", [...])
   var code = NINO.fromJSON(["+", ...])
 
-To see which operators are defined, just search for ``n.makeOp`` in the files ``compile.js`` and ``literals.js``. They generally follow JavaScript names and semantics.
+To see which operators are defined, search for ``n.makeOp`` in the files ``compile.js`` and ``literals.js``. They generally follow JavaScript names and semantics.
 
 Now that you have an AST, you need to pass it to the ``NINO.traverse`` function [#traverse]_ along with a scope, which is simply an object that says which global variables are defined::
 
@@ -21,7 +21,7 @@ Lastly, you call ``NINO.compile`` which returns a string::
   NINO.compile(ast, scope, "expression")
   NINO.compile(ast, scope, "statement")
 
-The third argument to ``NINO.compile`` determines whether the top level is treated as an expression or a statement. REPLs will generally want to use ``"expression"`` since they return a value. On the other hand, if you're putting the string into a file which will be loaded later, you should use ``"statement"``.
+The third argument to ``NINO.compile`` determines whether the top level is treated as an expression or a statement. REPLs will generally want to use ``"expression"`` because they return a value. On the other hand, if you're putting the string into a file which will be loaded later, you should use ``"statement"``.
 
 In addition, there are some optional properties::
 
@@ -30,15 +30,15 @@ In addition, there are some optional properties::
   NINO.warnings = true
   NINO.mangle = function (s) { return s }
 
-``NINO.builtins`` is an object that contains all the builtin JavaScript variables. It can be used as the second argument to ``NINO.traverse`` and ``NINO.compile``.
+* ``NINO.builtins`` is an object that contains all the builtin JavaScript variables. It can be used as the second argument to ``NINO.traverse`` and ``NINO.compile``.
 
-``NINO.minified`` controls whether the output is minified or not.
+* ``NINO.minified`` controls whether the output is minified or not.
 
-``NINO.warnings`` controls whether to display warning messages or not.
+* ``NINO.warnings`` controls whether to display warning messages or not.
 
-``NINO.mangle`` controls variable mangling. JavaScript variables can only contain certain characters, so if you have a variable which contains illegal characters, you have to mangle it to make it legal.
+* ``NINO.mangle`` controls variable mangling. JavaScript variables can only contain certain characters, so if you have a variable which contains illegal characters, you have to mangle it to make it legal.
 
-By default, only `reserved words <https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Reserved_Words>`_ and numbers at the start of the variable are mangled, but you can change ``NINO.mangle`` to use whatever mangling algorithm you wish.
+  By default, only `reserved words <https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Reserved_Words>`_ and numbers at the start of the variable are mangled, but you can change ``NINO.mangle`` to use whatever mangling algorithm you wish.
 
 Why use it?
 ===========
