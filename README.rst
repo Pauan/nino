@@ -189,6 +189,6 @@ Instead, let Nino handle all of that. Some cool features that Nino has:
 
    But let's suppose you wrote some code which is compiled with the Nino compiler. In addition, you load a third-party JavaScript library which Nino does not know about. In this case, it is entirely possible that uniques could collide with variables defined by the third-party library.
 
-   The answer to this is to let Nino know about the symbols defined in the third-party library. This only applies to *global uniques*: local uniques (defined inside of a function) are *always* guaranteed to *never* collide.
+   The answer to this is to use the second argument to ``NINO.traverse`` and ``NINO.compile`` to let Nino know about the variables defined in the third-party library. This only applies to *global uniques*: local uniques (defined inside of a function) are *always* guaranteed to *never* collide.
 
    Secondly, Nino provides a way to *completely bypass* the compiler and *insert arbitrary JavaScript code*. *Any* variables defined in this way could potentially collide with uniques.
