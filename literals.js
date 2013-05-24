@@ -9,6 +9,9 @@ var NINO = (function (n) {
     }
     var o = Object.create(n.ops[s])
     o.args = args
+    if (o.init != null) {
+      o.init(o)
+    }
     return o
   }
 
@@ -68,14 +71,8 @@ var NINO = (function (n) {
     if (reserved[s]) {
       return "_" + s
     } else {
-      return s.replace(/^([0-9])|([a-z])\-([a-z])|[^$a-zA-Z0-9]/g, function (s, s1, s2, s3) {
-        if (s1) {
-          return "_" + s1
-        } else if (s2) {
-          return s2 + s3.toLocaleUpperCase()
-        } else {
-          return s === "_" ? "__" : "_" + s.charCodeAt(0) + "_"
-        }
+      return n.mangle(s).replace(/^[0-9]/, function (s) {
+        return "_" + s
       })
     }
   }
@@ -90,15 +87,6 @@ var NINO = (function (n) {
       }
     })
   }*/
-
-  function mangleBox(s) {
-    // TODO: document isn't writable either, but should probably be handled in a different way
-    if (s === "undefined" || s === "NaN" || s === "Infinity" || s === "arguments") {
-      return "_" + s
-    } else {
-      return mangle(s)
-    }
-  }
 
   function getBox(x, s) {
     var s2 = s
@@ -182,8 +170,11 @@ var NINO = (function (n) {
 
   makeLiteral("symbol", {
     isVariable: true,
+    init: function (x) {
+      x.args[0] = mangle(x.args[0])
+    },
     compile: function (x) {
-      return mangle(x.args[0])
+      return x.args[0]
     }
   })
 
@@ -191,9 +182,9 @@ var NINO = (function (n) {
     isVariable: true,
     compile: function (x) {
       if (x.string) {
-        return mangleBox(x.string)
+        return x.string
       } else if (x.args[0] && !n.minified) {
-        return mangleBox(getBox(x, x.args[0]))
+        return getBox(x, mangle(x.args[0]))
       } else {
         return getUniq(x)
       }

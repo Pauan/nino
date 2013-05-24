@@ -4,22 +4,28 @@
     <script src="literals.js"></script>
     <script src="compile.js"></script>
     <script>
-      var scope = {}
-
       var a = NINO.op("unique", "a")
         , b = NINO.op("unique", "b")
         , c = NINO.op("unique", "c")
 
+      NINO.minified = false
+      NINO.warnings = true
+      NINO.mangle = function (s) {
+        return s.replace(/([a-z])\-([a-z])|[^$a-zA-Z0-9]/g, function (s, s1, s2) {
+          if (s1) {
+            return s1 + s2.toLocaleUpperCase()
+          } else {
+            return s === "_" ? "__" : "_" + s.charCodeAt(0) + "_"
+          }
+        })
+      }
+
       function expr(a) {
         a.map(function (x) {
-          return NINO.traverse(NINO.fromJSON(x), scope)
+          return NINO.traverse(NINO.fromJSON(x), NINO.builtins)
         }).forEach(function (x) {
           try {
-            console.log(NINO.compile(x, scope, {
-              type: "expression",
-              minified: false,
-              warnings: true
-            }))
+            console.log(NINO.compile(x, NINO.builtins, "expression"))
           } catch (e) {
             console.error(e.message)
           }
@@ -380,8 +386,9 @@
         ["symbol", "50fooBar-qux"],
         ["symbol", "break"],
         ["symbol", "NaN"],
+        ["symbol", "arguments"],
         ["unique", "arguments"],
-        ["symbol", "_arguments"],
+        ["symbol", "arguments2"],
         ["symbol", "_"],
 
         [",", ["bypass", "var YESNOTESTINGHAHAHA = 5"],
@@ -464,6 +471,12 @@
           [",", ["block-comment", "documentation goes here"],
                 ["line-comment", "documentation goes here"],
                 ["return", 2]]],
+
+        [",", 1, 2, ["empty"], 3],
+        [",", 1, 2, ["empty"]],
+        ["+", 1, ["empty"]],
+        ["+", [",", 1, 2, ["empty"], 3]],
+        ["+", [",", 1, 2, ["empty"]]],
       ])
 
       /*expr(["switch", 1,

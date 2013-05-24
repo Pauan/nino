@@ -1,6 +1,16 @@
 var NINO = (function (n) {
   "use strict"
 
+  n.minified = false
+  n.warnings = true
+  n.mangle   = function (s) { return s }
+
+  n.builtins = (function (n) {
+    "Number Math Boolean TypeError String Int16Array Float32Array isFinite Array DataView Float64Array ReferenceError SyntaxError Int32Array Uint16Array clearTimeout decodeURIComponent Uint32Array setTimeout eval console URIError unescape Date escape encodeURI Error Int8Array EvalError RangeError NaN isNaN parseInt undefined Object Uint8ClampedArray parseFloat Uint8Array clearInterval Infinity JSON Function setInterval encodeURIComponent decodeURI ArrayBuffer RegExp".split(" ").forEach(function (x) { n[x] = true })
+    n["arguments"] = true
+    return n
+  })({})
+
   n.space = function () {
     if (n.minified) {
       return ""
@@ -17,29 +27,10 @@ var NINO = (function (n) {
     }
   }
 
-  n.compile = function (x, scope, info) {
-    if (info == null) {
-      info = {}
-    }
-    if (info.type == null) {
-      info.type = "expression"
-    }
-    if (info.minified == null) {
-      info.minified = false
-    }
-    if (info.warnings == null) {
-      info.warnings = true
-    }
-    warnings = info.warnings
-    var old = n.minified
-    n.minified = info.minified
-    try {
-      return withVars(scope, function () {
-        return compileFn(blockWith(x, info.type))
-      })
-    } finally {
-      n.minified = old
-    }
+  n.compile = function (x, scope, type) {
+    return withVars(scope, function () {
+      return compileFn(blockWith(x, type))
+    })
   }
 
   n.traverse = function (x, scope) {
@@ -165,7 +156,6 @@ var NINO = (function (n) {
   var indent   = 0
     , priority = 0
     , scope    = { loop: false, function: false }
-    , warnings
     , statements
     , expressions
 
@@ -213,7 +203,7 @@ var NINO = (function (n) {
   function compile(w) {
     var x = unwrap(w)
       , s = x.compile(x)
-    if (x.isUseless && warnings) {
+    if (x.isUseless && n.warnings) {
       if (/\n/.test(s)) {
         console.warn("useless expression:\n" + n.space() + s)
       } else {
@@ -301,7 +291,7 @@ var NINO = (function (n) {
         statements.push(x)
       },
       expression: function (x) {
-        if (warnings) {
+        if (n.warnings) {
           console.warn("\"" + s + "\" was used in expression position")
         }
         if (x.isBreak) {
@@ -782,6 +772,13 @@ var NINO = (function (n) {
     }
   })
 
+  n.makeOp("empty", {
+    statement: function () {},
+    expression: function (x) {
+      return n.op("void", n.op("number", "0"))
+    }
+  })
+
   n.makeOp(";", {
     compile: function (x) {
       if (x.args.length === 0) {
@@ -813,13 +810,17 @@ var NINO = (function (n) {
         return expression(x.args[0])
       } else {
         var len = x.args.length - 1
-        x.args = x.args.map(function (x, i) {
-          x = expression(x)
+          , r   = []
+        x.args.forEach(function (x, i) {
+          var y = expression(x)
           if (i !== len) {
-            useless(x)
+            useless(y)
           }
-          return x
+          if (i === len || unwrap(x).op !== "empty") {
+            r.push(y)
+          }
         })
+        x.args = r
         return x
       }
     },

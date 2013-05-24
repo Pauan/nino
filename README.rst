@@ -18,17 +18,27 @@ In the above example, Nino will treat the variables ``foo`` and ``bar`` as being
 
 Lastly, you call ``NINO.compile`` which returns a string::
 
-  NINO.compile(ast, scope)
+  NINO.compile(ast, scope, "expression")
+  NINO.compile(ast, scope, "statement")
 
-In addition, you can pass an object as the third argument, which supports the following properties::
+The third argument to ``NINO.compile`` determines whether the top level is treated as an expression or a statement. REPLs will generally want to use ``"expression"`` since they return a value. On the other hand, if you're putting the string into a file which will be loaded later, you should use ``"statement"``.
 
-  NINO.compile(ast, scope, {
-    type: "expression",
-    minified: false,
-    warnings: true
-  })
+In addition, there are some optional properties::
 
-The ``type`` property determines whether the top level is treated as an ``"expression"`` (the default), or a ``"statement"``. REPLs will generally want to use ``"expression"`` since they return a value. On the other hand, if you're putting the string into a file which will be loaded later, you should use ``"statement"``.
+  NINO.builtins = { ... }
+  NINO.minified = false
+  NINO.warnings = true
+  NINO.mangle = function (s) { return s }
+
+``NINO.builtins`` is an object that contains all the builtin JavaScript variables. It can be used as the second argument to ``NINO.traverse`` and ``NINO.compile``.
+
+``NINO.minified`` controls whether the output is minified or not.
+
+``NINO.warnings`` controls whether to display warning messages or not.
+
+``NINO.mangle`` controls variable mangling. JavaScript variables can only contain certain characters, so if you have a variable which contains illegal characters, you have to mangle it to make it legal.
+
+By default, only `reserved words <https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Reserved_Words>`_ and numbers at the start of the variable are mangled, but you can change ``NINO.mangle`` to use whatever mangling algorithm you wish.
 
 Why use it?
 ===========
