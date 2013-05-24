@@ -3,11 +3,6 @@ var NINO = (function (n) {
 
   n.minified = false
   n.warnings = true
-  n.mangle = function (s) {
-    return s.replace(/[^$a-zA-Z0-9]/g, function (s, s1, s2) {
-      return s === "_" ? "__" : "_" + s.charCodeAt(0) + "_"
-    })
-  }
 
   n.builtins = (function (n) {
     "Number Math Boolean TypeError String Int16Array Float32Array isFinite Array DataView Float64Array ReferenceError SyntaxError Int32Array Uint16Array clearTimeout decodeURIComponent Uint32Array setTimeout eval console URIError unescape Date escape encodeURI Error Int8Array EvalError RangeError NaN isNaN parseInt undefined Object Uint8ClampedArray parseFloat Uint8Array clearInterval Infinity JSON Function setInterval encodeURIComponent decodeURI ArrayBuffer RegExp".split(" ").forEach(function (x) { n[x] = true })

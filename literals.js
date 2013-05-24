@@ -1,6 +1,12 @@
 var NINO = (function (n) {
   "use strict"
 
+  n.mangle = function (s) {
+    return s.replace(/[^$a-zA-Z0-9]/g, function (s, s1, s2) {
+      return s === "_" ? "__" : "_" + s.charCodeAt(0) + "_"
+    })
+  }
+
   n.ops = {}
 
   n.opArray = function (s, args) {
