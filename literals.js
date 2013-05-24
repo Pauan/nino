@@ -168,7 +168,7 @@ var NINO = (function (n) {
     }
   })
 
-  makeLiteral("symbol", {
+  makeLiteral("variable", {
     isVariable: true,
     init: function (x) {
       x.args[0] = mangle(x.args[0])

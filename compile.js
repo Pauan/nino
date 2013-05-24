@@ -57,7 +57,7 @@ var NINO = (function (n) {
 
     function seen(w) {
       var x = unwrap(w)
-      if (x.op === "symbol") {
+      if (x.op === "variable") {
         var s = x.args[0]
           , i = scopes.length
         while (i--) {
@@ -72,7 +72,7 @@ var NINO = (function (n) {
     function bind(w) {
       var last = scopes[scopes.length - 1]
       var x = unwrap(w)
-      if (x.op === "symbol") {
+      if (x.op === "variable") {
         last.bound[x.args[0]] = true
         seen(x)
         return wrap(w, x)

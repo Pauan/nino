@@ -338,56 +338,56 @@
 
         ["+", a, b],
 
-        ["+", ["symbol", "hiya"], ["symbol", "a"]],
+        ["+", ["variable", "hiya"], ["variable", "a"]],
 
         ["+", ["unique", "a"], ["unique", "b"]],
 
         (function () {
           var a = NINO.op("unique", "a")
           return ["function", [",", a],
-                   ["+", a, ["symbol", "a"]]]
+                   ["+", a, ["variable", "a"]]]
         })(),
 
-        ["function", [",", ["symbol", "b"]],
-          ["+", ["unique", "b"], ["symbol", "b"]]],
+        ["function", [",", ["variable", "b"]],
+          ["+", ["unique", "b"], ["variable", "b"]]],
 
-        ["function", [",", ["symbol", "a"]],
-          ["return", ["function", [",", ["symbol", "b"]],
-                       ["+", ["symbol", "a"], ["symbol", "b"]]]]],
+        ["function", [",", ["variable", "a"]],
+          ["return", ["function", [",", ["variable", "b"]],
+                       ["+", ["variable", "a"], ["variable", "b"]]]]],
 
         ["function", [","],
           [",", ["try", 1,
-                  ["catch", ["symbol", "TEST"],
-                    ["var", ["=", ["symbol", "yes"], 5]]]],
+                  ["catch", ["variable", "TEST"],
+                    ["var", ["=", ["variable", "yes"], 5]]]],
                 ["+", ["unique", "yes"], ["unique", "TEST"]]]],
 
         ["function", [","],
           [",", ["try", 1,
-                  ["catch", ["symbol", "TEST"],
+                  ["catch", ["variable", "TEST"],
                     ["unique", "TEST"]]],
                 ["unique", "TEST"]]],
 
         ["+", ["unique", "b"], 1],
 
-        ["function-var", ["symbol", "foo"], [","],
+        ["function-var", ["variable", "foo"], [","],
           ["return", 1]],
 
         ["+", ["unique", "foo"], 1],
 
-        ["symbol", "50fooBar-qux"],
-        ["symbol", "foo&bar"],
-        ["symbol", "foo_bar"],
-        ["symbol", "break"],
-        ["symbol", "NaN"],
-        ["symbol", "arguments"],
+        ["variable", "50fooBar-qux"],
+        ["variable", "foo&bar"],
+        ["variable", "foo_bar"],
+        ["variable", "break"],
+        ["variable", "NaN"],
+        ["variable", "arguments"],
         ["unique", "arguments"],
-        ["symbol", "arguments2"],
-        ["symbol", "_"],
+        ["variable", "arguments2"],
+        ["variable", "_"],
 
         [",", ["bypass", "var YESNOTESTINGHAHAHA = 5"],
               ["+", 5, 20]],
 
-        ["+", 1, ["var", ["=", ["symbol", "a"], 2]]],
+        ["+", 1, ["var", ["=", ["variable", "a"], 2]]],
 
         ["function", [","],
           [",", ["return", 1], 2]],
@@ -430,24 +430,24 @@
         ["+", ["call", 1, 2], ["try", 3, ["finally", 4]], ["throw", 3]],
         ["+", ["call", 1, 2], ["try", 3, ["finally", 4]]],
         ["+", ["call", 1, 2], ["while", 3, 4]],
-        ["+", ["call", 1, 2], ["var", ["=", ["symbol", "a"], ["call", 3, 4]]]],
+        ["+", ["call", 1, 2], ["var", ["=", ["variable", "a"], ["call", 3, 4]]]],
 
-        ["+", ["call", 1, 2], ["var", ["=", ["symbol", "a"], ["function", [","], ["return", 3]]]]],
+        ["+", ["call", 1, 2], ["var", ["=", ["variable", "a"], ["function", [","], ["return", 3]]]]],
 
-        ["+", ["call", ["symbol", "a"]],
-              ["var", ["=", ["symbol", "a"], 3]]],
+        ["+", ["call", ["variable", "a"]],
+              ["var", ["=", ["variable", "a"], 3]]],
 
-        ["+", ["+", ["call", ["symbol", "b"]], 2],
-              ["var", ["=", ["symbol", "a"], ["call", 3, 4]]]],
+        ["+", ["+", ["call", ["variable", "b"]], 2],
+              ["var", ["=", ["variable", "a"], ["call", 3, 4]]]],
 
-        ["+", ["symbol", "a"],
-              ["var", ["=", ["symbol", "a"], 3]]],
+        ["+", ["variable", "a"],
+              ["var", ["=", ["variable", "a"], 3]]],
 
-        ["+", ["+", ["symbol", "a"], 2],
-              ["var", ["=", ["symbol", "a"], 3]]],
+        ["+", ["+", ["variable", "a"], 2],
+              ["var", ["=", ["variable", "a"], 3]]],
 
-        ["+", ["symbol", "b"],
-              ["var", ["=", ["symbol", "a"], 3]]],
+        ["+", ["variable", "b"],
+              ["var", ["=", ["variable", "a"], 3]]],
 
 
         ["=", a, ["=", b, ["=", c, 1]]],

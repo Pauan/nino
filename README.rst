@@ -63,7 +63,7 @@ Instead, let Nino handle all of that. Some cool features that Nino has:
 
 * Generates *very* short and *very* fast JavaScript.
 
-* In addition to a ``"symbol"`` datatype, Nino also has a ``"unique"`` datatype. The only difference is that a ``"unique"`` is guaranteed to never collide with any other variable [#uniques]_. If you've used Lisps, a ``"unique"`` is exactly the same as a gensym.
+* In addition to a ``"variable"`` datatype, Nino also has a ``"unique"`` datatype. The only difference is that a ``"unique"`` is guaranteed to never collide with any other variable [#uniques]_. If you've used Lisps, a ``"unique"`` is exactly the same as a gensym.
 
 * The Nino AST is generally fairly simple and intelligent. It has some conveniences:
 
@@ -144,7 +144,7 @@ Instead, let Nino handle all of that. Some cool features that Nino has:
     ::
 
       NINO.fromJSON(["+", ["call", 1, 2],
-                          ["var", ["=", ["symbol", "a"], ["call", 3, 4]]]])
+                          ["var", ["=", ["variable", "a"], ["call", 3, 4]]]])
 
       var b = 1(2),
           a = 3(4);
