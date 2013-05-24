@@ -91,19 +91,17 @@ var NINO = (function (n) {
     })
   }*/
 
-  function getBox(x, s) {
+  n.getUnique = function (s, scope) {
     var s2 = s
       , i  = 2
-    while (n.scope[s2]) {
+    while (scope[s2]) {
       s2 = s + i
       ++i
     }
-    n.scope[s2] = true
-    x.string = s2
     return s2
   }
 
-  function getNextUniq(s, f) {
+  function getNextUniq(s) {
     var r = s.split("")
       , i = r.length
     while (i--) {
@@ -117,13 +115,11 @@ var NINO = (function (n) {
     return r.join("") + "a"
   }
 
-  function getUniq(x) {
+  function getUniq(scope) {
     var s = "a"
-    while (n.scope[s]) {
+    while (scope[s]) {
       s = getNextUniq(s)
     }
-    n.scope[s] = true
-    x.string = s
     return s
   }
 
@@ -181,13 +177,15 @@ var NINO = (function (n) {
   makeLiteral("unique", {
     isVariable: true,
     compile: function (x) {
-      if (x.string) {
-        return x.string
-      } else if (x.args[0] && !n.minified) {
-        return getBox(x, mangle(x.args[0]))
-      } else {
-        return getUniq(x)
+      if (x.string == null) {
+        if (x.args[0] != null && !n.minified) {
+          x.string = n.getUnique(mangle(x.args[0]), n.scope)
+        } else {
+          x.string = getUniq(n.scope)
+        }
+        n.scope[x.string] = true
       }
+      return x.string
     }
   })
 

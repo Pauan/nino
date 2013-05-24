@@ -115,9 +115,9 @@ var NINO = (function (n) {
 
   n.store = function (o) {
     return { text:  o.text
-           , start: { line: o.start.line
+           , start: { line:   o.start.line
                     , column: o.start.column }
-           , end:   { line: o.end.line
+           , end:   { line:   o.end.line
                     , column: o.end.column } }
   }
 
