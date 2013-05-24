@@ -79,52 +79,58 @@ var NINO = (function (n) {
   // This is useful for error messages
   n.stringBuffer = function (s) {
     var re = /([^\n]*)(?:\n|$)/g
+      , o  = { line: 1, column: 1 }
     return {
-      line: 1,
-      column: 1,
       text: reMatch(re, s),
+      start: o,
+      end: o,
       peek: function () {
-        return this.text[this.column - 1]
+        return this.text[o.column - 1]
       },
       read: function () {
-        var x = this.text[this.column - 1]
-        if (this.column >= this.text.length) {
+        var x = this.text[o.column - 1]
+        if (o.column >= this.text.length) {
           var y = reMatch(re, s)
           // TODO: a little bit hacky
           if (y === "") {
-            ++this.column
+            ++o.column
             this.read = function () {
-              return this.text[this.column - 1]
+              return this.text[o.column - 1]
             }
           } else {
             this.text = y
-            this.column = 1
-            ++this.line
+            o.column = 1
+            ++o.line
           }
         } else {
-          ++this.column
+          ++o.column
         }
         return x
       },
       has: function () {
-        return this.column <= this.text.length
+        return o.column <= this.text.length
       }
     }
   }
 
   n.store = function (o) {
-    return { text:   o.text
-           , line:   o.line
-           , column: o.column }
+    return { text:  o.text
+           , start: { line: o.start.line
+                    , column: o.start.column }
+           , end:   { line: o.end.line
+                    , column: o.end.column } }
   }
 
   n.enrich = function (x, y, z) {
     x.text  = y.text
-    x.start = { line: y.line, column: y.column }
+    x.start = { line:   y.start.line
+              , column: y.start.column }
     if (z != null) {
-      x.end = { line: z.line, column: z.column }
+      x.end = { line:   z.end.line
+              , column: z.end.column }
     } else {
-      x.end = { line: y.line, column: y.column }
+      x.end = { line:   y.end.line
+              , column: y.end.column }
     }
     return x
   }

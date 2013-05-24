@@ -849,7 +849,14 @@ var NINO = (function (n) {
       return withPriority(85, function () {
         var y
         if ((y = jsProp(x.args[1]))) {
-          return compile(x.args[0]) + "." + y
+          x = unwrap(x.args[0])
+                                   // TODO not sure how efficient this is...
+          if (x.op === "number" && Math.round(x.args[0]) === x.args[0]) {
+            x = compile(x) + "."
+          } else {
+            x = compile(x)
+          }
+          return x + "." + y
         } else {
           return compile(x.args[0]) + "[" + compile(x.args[1]) + "]"
         }
@@ -1142,7 +1149,7 @@ var NINO = (function (n) {
       return resetPriority(6, function () {
         var r = []
         withIndent(indent + 1, function () {
-          for (var i = 0, iLen = x.args.length; i < iLen; i += 2) {
+          for (var i = 0, iLen = x.args.length - 1; i < iLen; i += 2) {
             r.push(n.minify("\n") + n.space() +
                    (jsProp(x.args[i]) || compile(x.args[i])) + ":" + n.minify(" ") +
                    compile(x.args[i + 1]))
