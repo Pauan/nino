@@ -49,7 +49,7 @@ var NINO = (function (n) {
     function seen(w) {
       var x = unwrap(w)
       if (x.op === "variable") {
-        var s = x.args[0]
+        var s = compile(x)
           , i = scopes.length
         while (i--) {
           scopes[i].scope[s] = true
@@ -64,7 +64,7 @@ var NINO = (function (n) {
       var last = scopes[scopes.length - 1]
       var x = unwrap(w)
       if (x.op === "variable") {
-        last.bound[x.args[0]] = true
+        last.bound[compile(x)] = true
         seen(x)
         return wrap(w, x)
       } else if (x.op === "unique" && last.uniques) {

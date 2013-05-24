@@ -15,9 +15,6 @@ var NINO = (function (n) {
     }
     var o = Object.create(n.ops[s])
     o.args = args
-    if (o.init != null) {
-      o.init(o)
-    }
     return o
   }
 
@@ -176,11 +173,8 @@ var NINO = (function (n) {
 
   makeLiteral("variable", {
     isVariable: true,
-    init: function (x) {
-      x.args[0] = mangle(x.args[0])
-    },
     compile: function (x) {
-      return x.args[0]
+      return mangle(x.args[0])
     }
   })
 
