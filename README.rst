@@ -28,7 +28,7 @@ In addition, there are some optional properties::
   NINO.builtins = { ... }
   NINO.minified = false
   NINO.warnings = true
-  NINO.mangle = function (s) { return s }
+  NINO.mangle   = function (s) { ... }
 
 * ``NINO.builtins`` is an object that contains all the builtin JavaScript variables. It can be used as the second argument to ``NINO.traverse`` and ``NINO.compile``.
 
@@ -36,9 +36,13 @@ In addition, there are some optional properties::
 
 * ``NINO.warnings`` controls whether to display warning messages or not.
 
-* ``NINO.mangle`` controls variable mangling. JavaScript variables can only contain certain characters, so if you have a variable which contains illegal characters, you have to mangle it to make it legal.
+* ``NINO.mangle`` controls variable mangling. JavaScript variables can only contain certain characters, so if you have a variable which contains illegal characters, you have to mangle it to make it legal. The default behavior is as follows::
 
-  By default, only `reserved words <https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Reserved_Words>`_ and numbers at the start of the variable are mangled, but you can change ``NINO.mangle`` to use whatever mangling algorithm you wish.
+    break    ->  _break
+    0foo     ->  _0foo
+    foo-bar  ->  fooBar
+    foo&bar  ->  foo_38_bar
+    foo_bar  ->  foo__bar
 
 Why use it?
 ===========

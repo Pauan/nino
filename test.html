@@ -10,15 +10,6 @@
 
       NINO.minified = false
       NINO.warnings = true
-      NINO.mangle = function (s) {
-        return s.replace(/([a-z])\-([a-z])|[^$a-zA-Z0-9]/g, function (s, s1, s2) {
-          if (s1) {
-            return s1 + s2.toLocaleUpperCase()
-          } else {
-            return s === "_" ? "__" : "_" + s.charCodeAt(0) + "_"
-          }
-        })
-      }
 
       function expr(a) {
         a.map(function (x) {
@@ -384,6 +375,8 @@
         ["+", ["unique", "foo"], 1],
 
         ["symbol", "50fooBar-qux"],
+        ["symbol", "foo&bar"],
+        ["symbol", "foo_bar"],
         ["symbol", "break"],
         ["symbol", "NaN"],
         ["symbol", "arguments"],
