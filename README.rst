@@ -25,16 +25,16 @@ The third argument to ``NINO.compile`` determines whether the top level is treat
 
 In addition, there are some optional properties::
 
-  NINO.builtins = { ... }
   NINO.minified = false
   NINO.warnings = true
+  NINO.builtins = { ... }
   NINO.mangle   = function (s) { ... }
-
-* ``NINO.builtins`` is an object that contains all the builtin JavaScript variables. It can be used as the second argument to ``NINO.traverse`` and ``NINO.compile``.
 
 * ``NINO.minified`` controls whether the output is minified or not.
 
 * ``NINO.warnings`` controls whether to display warning messages or not.
+
+* ``NINO.builtins`` is an object that contains all the builtin JavaScript variables. It can be used as the second argument to ``NINO.traverse`` and ``NINO.compile``.
 
 * ``NINO.mangle`` controls variable mangling. JavaScript variables can only contain certain characters, so if you have a variable which contains illegal characters, you have to mangle it to make it legal. The default behavior is as follows::
 
