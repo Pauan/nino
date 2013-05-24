@@ -4,12 +4,8 @@ var NINO = (function (n) {
   n.minified = false
   n.warnings = true
   n.mangle = function (s) {
-    return s.replace(/([a-z])\-([a-z])|[^$a-zA-Z0-9]/g, function (s, s1, s2) {
-      if (s1) {
-        return s1 + s2.toLocaleUpperCase()
-      } else {
-        return s === "_" ? "__" : "_" + s.charCodeAt(0) + "_"
-      }
+    return s.replace(/[^$a-zA-Z0-9]/g, function (s, s1, s2) {
+      return s === "_" ? "__" : "_" + s.charCodeAt(0) + "_"
     })
   }
 

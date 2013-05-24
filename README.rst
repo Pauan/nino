@@ -40,7 +40,6 @@ In addition, there are some optional properties::
 
     break    ->  _break
     0foo     ->  _0foo
-    foo-bar  ->  fooBar
     foo&bar  ->  foo_38_bar
     foo_bar  ->  foo__bar
 
