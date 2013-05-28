@@ -9,7 +9,10 @@ var NINO = (function (n) {
 
   n.ops = {}
 
-  n.opArray = function (s, args) {
+  n.opArray = function (s) {
+    var args = [].slice.call(arguments, 1, -1)
+    args = args.concat(arguments[arguments.length - 1])
+
     if (n.ops[s] == null) {
       throw new Error("unknown operator: " + s)
     }
@@ -27,15 +30,14 @@ var NINO = (function (n) {
       return n.op("number", x)
     } else if (typeof x === "string") {
       return n.op("string", x)
-    } else if (x.op === "wrapper") {
-      x.args = x.args.map(n.fromJSON)
-      return x
-    } else if (x.isLiteral) {
-      return x
-    } else if (n.ops[x[0]].isLiteral) {
-      return n.opArray(x[0], x.slice(1))
+    } else if (Array.isArray(x)) {
+      if (n.ops[x[0]].isLiteral) {
+        return n.opArray(x[0], x.slice(1))
+      } else {
+        return n.opArray(x[0], x.slice(1).map(n.fromJSON))
+      }
     } else {
-      return n.opArray(x[0], x.slice(1).map(n.fromJSON))
+      return x
     }
   }
 
