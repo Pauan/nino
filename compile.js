@@ -1,6 +1,12 @@
 var NINO = (function (n) {
   "use strict"
 
+  if (n.Error == null) {
+    n.Error = function (x, s) {
+      throw new Error(s)
+    }
+  }
+
   n.minified = false
   n.warnings = true
 
@@ -11,7 +17,9 @@ var NINO = (function (n) {
   })({})
 
   n.print = function (x) {
-    if (x.isLiteral) {
+    if (x.op === "unique") {
+      return x.args[0] // TODO
+    } else if (x.isLiteral) {
       return x.compile(x)
     } else {
       return "(" + x.op + x.args.map(function (x) {
@@ -297,7 +305,19 @@ var NINO = (function (n) {
       isBreak: isBreak,
       statement: function (x) {
         x.args = x.args.map(expression)
-        statements.push(x)
+        if (x.args.length && s === "return") { // TODO ew
+          var y = unwrap(x.args[0])
+          if (y.op === "void") {
+            if (isImpure(y.args[0])) {
+              statements.push(y.args[0])
+            }
+            x.args.shift()
+          }
+        }
+                          // TODO ew
+        if (!(x.isLast && s === "return" && x.args.length === 0)) {
+          statements.push(x)
+        }
       },
       expression: function (x) {
         if (n.warnings) {
@@ -318,11 +338,11 @@ var NINO = (function (n) {
         return expression(n.op("void", n.op("number", 0)))
       },
       compile: function (x) {
+        if (x.args.length > 1) {
+          throw new n.Error(x, "\"" + s + "\" expected 0 or 1 arguments but got " + x.args.length)
+        }
         var s2
         if (x.args.length) {
-          if (x.args.length > 1) {
-            throw new n.Error(x, "\"" + s + "\" expected 0 or 1 arguments but got " + x.args.length)
-          }
           s2 = s + " " + compile(x.args[0])
         } else {
           s2 = s
@@ -738,6 +758,15 @@ var NINO = (function (n) {
     return blockWith(x, "statement")
   }
 
+  function functionStatement(x) {
+    var y = unwrap(x)
+    while (y.op === ",") {
+      y = unwrap(y.args[y.args.length - 1])
+    }
+    y.isLast = true
+    return blockStatement(x)
+  }
+
   function withIndent(i, f) {
     var old = indent
     indent = i
@@ -838,9 +867,9 @@ var NINO = (function (n) {
 
   n.makeOp(";", {
     compile: function (x) {
-      if (x.args.length === 0) {
+      /*if (x.args.length === 0) {
         throw new n.Error(x, "\",\" expected at least 1 argument but got 0")
-      } else {
+      } else {*/
         var r   = []
           , len = x.args.length - 1
         x.args.forEach(function (w, i) {
@@ -854,7 +883,7 @@ var NINO = (function (n) {
           }
         })
         return r.join("")
-      }
+      //}
     }
   })
 
@@ -1311,7 +1340,7 @@ var NINO = (function (n) {
     expression: function (x) {
       var args = unwrap(x.args[0])
       args.args = args.args.map(expression)
-      x.args[1] = blockStatement(x.args[1])
+      x.args[1] = functionStatement(x.args[1])
       return x
     },
     compile: function (x) {
@@ -1328,7 +1357,7 @@ var NINO = (function (n) {
       var args = unwrap(x.args[1])
       x.args[0] = expression(x.args[0])
       args.args = args.args.map(expression)
-      x.args[2] = blockStatement(x.args[2])
+      x.args[2] = functionStatement(x.args[2])
       statements.push(x)
     },
     expression: function (x) {
