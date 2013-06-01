@@ -66,7 +66,7 @@ Instead, let Nino handle all of that. Some cool features that Nino has:
 
 * The Nino AST is generally fairly simple and intelligent. It has some conveniences:
 
-  * ``"if"`` supports 1 or more arguments::
+  * ``"if"`` supports 1 to 3 arguments::
 
       NINO.fromJSON(["if", 1])
 
@@ -83,12 +83,6 @@ Instead, let Nino handle all of that. Some cool features that Nino has:
       NINO.fromJSON(["if", 1, 2, 3])
 
       1 ? 2 : 3
-
-    ::
-
-      NINO.fromJSON(["if", 1, 2, 3, 4])
-
-      1 ? 2 : 3 && 4
 
   * ``"<"``, ``"<="``, ``">"``, ``">="``, ``"=="``, ``"!="``, ``"==="``, and ``"!=="`` all support more than 2 arguments with the following behavior::
 

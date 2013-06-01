@@ -125,11 +125,60 @@ var NINO = (function (n) {
     return s
   }
 
+  function serialize(x) {
+    var s = Object.prototype.toString.call(x)
+    switch (s) {
+    case "[object String]":
+    case "[object Number]":
+    case "[object Boolean]":
+      return "" + x
+
+    case "[object Undefined]":
+      return "void 0"
+
+    case "[object Arguments]":
+      return serialize([].slice.call(x))
+
+    default:
+      if (n.warnings) {
+        console.warn("serializing object, identity and prototype will be lost")
+      }
+      switch (s) {
+      case "[object Array]":
+        if (n.minified) {
+          return "[" + [].map.call(x, serialize).join(",") + "]"
+        } else {
+          return "[" + [].map.call(x, serialize).join(", ") + "]"
+        }
+
+      case "[object Object]":
+        if (n.minified) {
+          return "(" + JSON.stringify(x) + ")"
+        } else {
+          return "(" + JSON.stringify(x, null, 2) + ")"
+        }
+
+      case "[object Date]":
+        return "new Date(" + (+x) + ")"
+
+      case "[object RegExp]":
+        return "" + x
+
+      // "[object Function]"
+      // "[object Error]"
+      // "[object Math]"
+      // "[object JSON]"
+      default:
+        throw new Error("can't serialize " + s)
+      }
+    }
+  }
+
   makeLiteral("bypass", {
     isImpure: true, // TODO
     isStatement: true, // TODO
     compile: function (x) {
-      return "" + x.args[0]
+      return serialize(x.args[0])
     }
   })
 

@@ -5,6 +5,12 @@ var NINO = (function (n) {
   n.Error = function (o, s) {
     var a = [s]
     if (Object(o) === o) {
+      while (o.op === "wrapper" &&
+             o.start == null &&
+             o.end   == null &&
+             o.text  == null) {
+        o = o.args[0] // TODO
+      }
       /*n.tokenUpdate(o, function (o) {
         o.type = "error"
       })*/
@@ -122,13 +128,23 @@ var NINO = (function (n) {
   }
 
   n.enrich = function (x, y, z) {
-    x.text  = y.text
-    x.start = { line:   y.start.line
-              , column: y.start.column }
+    while (y.op === "wrapper" && y.text == null && y.start == null) {
+      y = y.args[0] // TODO
+    }
+    x.text = y.text
+    if (y.start != null) {
+      x.start = { line:   y.start.line
+                , column: y.start.column }
+    }
+
     if (z != null) {
-      x.end = { line:   z.end.line
-              , column: z.end.column }
-    } else {
+      y = z
+    }
+
+    while (y.op === "wrapper" && y.end == null) {
+      y = y.args[0] // TODO
+    }
+    if (y.end != null) {
       x.end = { line:   y.end.line
               , column: y.end.column }
     }
