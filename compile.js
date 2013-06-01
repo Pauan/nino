@@ -1,10 +1,63 @@
 var NINO = (function (n) {
   "use strict"
 
-  if (n.Error == null) {
-    n.Error = function (x, s) {
-      throw new Error(s)
+  n.Error = function (x, s) {
+    throw new Error(s + ": " + n.print(x))
+  }
+
+  n.setUnique = function (s, scope) {
+    var s2 = s
+      , i  = 2
+    while (scope[s2]) {
+      s2 = s + i
+      ++i
     }
+    return s2
+  }
+
+  n.mangle = function (s) {
+    return s.replace(/[^$a-zA-Z0-9]/g, function (s, s1, s2) {
+      return s === "_" ? "__" : "_" + s.charCodeAt(0) + "_"
+    })
+  }
+
+  n.ops = {}
+
+  n.opArray = function (s) {
+    var args = [].slice.call(arguments, 1, -1)
+    args = args.concat(arguments[arguments.length - 1])
+
+    if (n.ops[s] == null) {
+      throw new Error("unknown operator: " + s)
+    }
+    var o = Object.create(n.ops[s])
+    o.args = args
+    return o
+  }
+
+  n.op = function (s) {
+    return n.opArray(s, [].slice.call(arguments, 1))
+  }
+
+  n.fromJSON = function (x) {
+    if (typeof x === "number") {
+      return n.op("number", x)
+    } else if (typeof x === "string") {
+      return n.op("string", x)
+    } else if (Array.isArray(x)) {
+      if (n.ops[x[0]].isLiteral) {
+        return n.opArray(x[0], x.slice(1))
+      } else {
+        return n.opArray(x[0], x.slice(1).map(n.fromJSON))
+      }
+    } else {
+      return x
+    }
+  }
+
+  n.makeOp = function (s, info) {
+    info.op = s
+    n.ops[s] = info
   }
 
   n.minified = false
@@ -195,6 +248,116 @@ var NINO = (function (n) {
     , statements
     , expressions
 
+  var reserved = {}
+
+  // https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Reserved_Words
+  ;("break case catch continue debugger default delete do else finally for function if in instanceof new return switch this throw try typeof var void while with " +
+    "class enum export extends import super " +
+    "implements interface let package private protected public static yield " +
+    "null true false").split(" ").forEach(function (s) {
+    reserved[s] = true
+  })
+
+  /*
+  Object.getOwnPropertyNames(window).forEach(function (s) {
+    if (!Object.getOwnPropertyDescriptor(window, s).writable) {
+      console.log(s)
+    }
+  })
+  */
+
+  function mangle(s) {
+    if (reserved[s]) {
+      return "_" + s
+    } else {
+      return n.mangle(s).replace(/^[0-9]/, function (s) {
+        return "_" + s
+      })
+    }
+  }
+
+  /*function unmangle(s) {
+    // |([a-z])([A-Z])
+    return s.replace(/_([0-9]*)_|^_([a-z0-9])/g, function (_, s, s1) {
+      if (s1) {
+        return s1
+      } else {
+        return s === "" ? "_" : String.fromCharCode(s)
+      }
+    })
+  }*/
+
+  function getNextUniq(s) {
+    var r = s.split("")
+      , i = r.length
+    while (i--) {
+      if (r[i] === "z") {
+        r[i] = "a"
+      } else {
+        r[i] = String.fromCharCode(r[i].charCodeAt(0) + 1)
+        return r.join("")
+      }
+    }
+    return r.join("") + "a"
+  }
+
+  function getUniq(scope) {
+    var s = "a"
+    while (scope[s]) {
+      s = getNextUniq(s)
+    }
+    return s
+  }
+
+  function serialize(x) {
+    var s = Object.prototype.toString.call(x)
+    switch (s) {
+    case "[object String]":
+    case "[object Number]":
+    case "[object Boolean]":
+      return "" + x
+
+    case "[object Undefined]":
+      return "void 0"
+
+    case "[object Arguments]":
+      return serialize([].slice.call(x))
+
+    default:
+      if (n.warnings) {
+        console.warn("serializing object, identity and prototype will be lost")
+      }
+      switch (s) {
+      case "[object Array]":
+        if (n.minified) {
+          return "[" + [].map.call(x, serialize).join(",") + "]"
+        } else {
+          return "[" + [].map.call(x, serialize).join(", ") + "]"
+        }
+
+      case "[object Object]":
+        if (n.minified) {
+          return "(" + JSON.stringify(x) + ")"
+        } else {
+          return "(" + JSON.stringify(x, null, 2) + ")"
+        }
+
+      case "[object Date]":
+        return "new Date(" + (+x) + ")"
+
+      case "[object RegExp]":
+        return "" + x
+
+      // "[object Function]"
+      // "[object Error]"
+      // "[object Math]"
+      // "[object JSON]"
+      default:
+        throw new Error("can't serialize " + s)
+      }
+    }
+  }
+
   // mangle("50fooBar-qux")
 
   /*n.onScope.push(function (scope) {
@@ -316,6 +479,18 @@ var NINO = (function (n) {
     }
   }
 
+  function makeLiteral(s, min, max, info) {
+    if (typeof info === "function") {
+      info = { compile: info }
+    }
+    info.expression = function (x) {
+      argumentError(x, min, max)
+      return x
+    }
+    info.isLiteral = true
+    n.makeOp(s, info)
+  }
+
   function stmt(s, isBreak, f) {
     n.makeOp(s, {
       isImpure: true,
@@ -415,7 +590,7 @@ var NINO = (function (n) {
           return withPriority(x.unary, function () {
             var right = n.unwrap(x.args[0])
             if (x.unary === right.unary) {
-              throw new n.Error(x, "invalid assignment: " + n.print(x)) // s2 + compile(right)
+              throw new n.Error(x, "invalid assignment") // s2 + compile(right)
             }
             return s + compile(right)
           })
@@ -424,7 +599,7 @@ var NINO = (function (n) {
             var left  = n.unwrap(x.args[0])
               , right = n.unwrap(x.args[1])
             if (x.binary === left.binary) {
-              throw new n.Error(x, "invalid left hand side for assignment: " + n.print(x))
+              throw new n.Error(x, "invalid left hand side for assignment")
                                    /*
                                    compile(left) + ")" +
                                    n.minify(" ") + s2 + n.minify(" ") +
@@ -526,7 +701,7 @@ var NINO = (function (n) {
 
             if (o.order === "right") {
               if (x.binary === left.binary) {
-                throw new n.Error(x, "invalid left hand side for assignment: " + n.print(x))
+                throw new n.Error(x, "invalid left hand side for assignment")
                                      /*
                                      compile(left) + ")" +
                                      n.minify(" ") + s2 + n.minify(" ") +
@@ -755,7 +930,7 @@ var NINO = (function (n) {
 
   function expression(w) {
     var x = n.unwrap(w)
-      , y = (x.expression ? x.expression(x) : x)
+      , y = x.expression(x)
     if (!x.isStatement) {
       y = n.op("wrapper", y)
       expressions.push(y)
@@ -834,6 +1009,128 @@ var NINO = (function (n) {
   /**
    *  Operators
    */
+  makeLiteral("bypass", 1, 1, {
+    isImpure: true, // TODO
+    isStatement: true, // TODO
+    compile: function (x) {
+      return serialize(x.args[0])
+    }
+  })
+
+  makeLiteral("line-comment", 0, 1, {
+    isUseful: true,
+    noSemicolon: true,
+    compile: function (x) {
+      if (x.args[0] == null) {
+        return n.minify("//")
+      } else {
+        return n.minify("// " + x.args[0])
+      }
+    }
+  })
+
+  makeLiteral("block-comment", 0, 1, {
+    isUseful: true,
+    noSemicolon: true,
+    compile: function (x) {
+      if (x.args[0] == null) {
+        return "/**/"
+      } else {
+        return n.minify("/* " + x.args[0].replace(/\*\/|\n/g, function (s) {
+          if (s === "\n") {
+            return "\n" + n.space() + "   "
+          } else {
+            return "* /"
+          }
+        }) + " */")
+      }
+    }
+  })
+
+  makeLiteral("doc-comment", 0, 1, {
+    isUseful: true,
+    noSemicolon: true,
+    compile: function (x) {
+      if (x.args[0] == null) {
+        return "/**/"
+      } else {
+        return "/**\n" + n.space() + " * " + x.args[0].replace(/\*\/|\n/g, function (s) {
+          if (s === "\n") {
+            return "\n" + n.space() + " * "
+          } else {
+            return "* /"
+          }
+        }) + "\n" + n.space() + " */"
+      }
+    }
+  })
+
+  makeLiteral("variable", 1, 1, {
+    isVariable: true,
+    compile: function (x) {
+      return mangle(x.args[0])
+    }
+  })
+
+  makeLiteral("unique", 0, 1, {
+    isVariable: true,
+    compile: function (x) {
+      if (x.string == null) {
+        if (x.args[0] != null && !n.minified) {
+          x.string = n.setUnique(mangle(x.args[0]), n.scope)
+        } else {
+          x.string = getUniq(n.scope)
+        }
+        n.scope[x.string] = true
+      }
+      return x.string
+    }
+  })
+
+  makeLiteral("true", 0, 0, function () {
+    return "true"
+  })
+
+  makeLiteral("false", 0, 0, function () {
+    return "false"
+  })
+
+  makeLiteral("null", 0, 0, function () {
+    return "null"
+  })
+
+  makeLiteral("number", 1, 1, function (x) {
+    return x.args[0]
+  })
+
+  makeLiteral("string", 0, 1, function (x) {
+    if (x.args[0] == null) {
+      return "\"\""
+    } else {
+      return "\"" + x.args[0].replace(/["\\\b\f\n\r\t\v]/g, function (s) {
+        if (s === "\"" || s === "\\") {
+          return "\\" + s
+        } else if (s === "\b") {
+          return "\\b"
+        } else if (s === "\f") {
+          return "\\f"
+        } else if (s === "\n") {
+          return "\\n"
+        } else if (s === "\r") {
+          return "\\r"
+        } else if (s === "\t") {
+          return "\\t"
+        } else if (s === "\v") {
+          return "\\v"
+        }
+      }) + "\""
+    }
+  })
+
+  makeLiteral("regexp", 1, 1, function (x) {
+    return "/" + x.args[0].replace(/[\/\\]/g, "\\$&") + "/"
+  })
+
   n.makeOp("wrapper", {})
 
   op("!",          { unary:  70, args: 1 })
@@ -1377,13 +1674,13 @@ var NINO = (function (n) {
       spliceBlock(x, 0)
       var first = n.unwrap(x.args[0])
       if (first.op !== "var" && !first.isVariable) {
-        throw new n.Error(x.args[0], "the first argument must be a variable or (var ...): " + n.print(x))
+        throw new n.Error(x.args[0], "must be a variable or (var ...)")
       }
       if (first.op === "var") {
         if (first.args.length === 1 && n.unwrap(first.args[0]).isVariable) {
           x.args[0] = n.wrap(x.args[0], blockStatement(first))
         } else {
-          throw new n.Error(x.args[0], "invalid assignment for first argument: " + n.print(x))
+          throw new n.Error(x.args[0], "invalid assignment")
         }
       } else {
         x.args[0] = n.wrap(x.args[0], expression(first))

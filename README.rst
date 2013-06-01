@@ -7,7 +7,7 @@ First, you must create a Nino AST by calling the ``NINO.op``, ``NINO.opArray``, 
   var code = NINO.opArray("+", [...])
   var code = NINO.fromJSON(["+", ...])
 
-To see which operators are defined, search for ``n.makeOp`` in the files ``compile.js`` and ``literals.js``. They generally follow JavaScript names and semantics.
+To see which operators are defined, search for ``n.makeOp`` in the file ``compile.js``. They generally follow JavaScript names and semantics.
 
 Now that you have an AST, you need to pass it to the ``NINO.traverse`` function [#traverse]_ along with a scope, which is simply an object that says which global variables are defined::
 
@@ -29,6 +29,7 @@ In addition, there are some optional properties::
   NINO.warnings = true
   NINO.builtins = { ... }
   NINO.mangle   = function (s) { ... }
+  NINO.Error    = function (x, s) { ... }
 
 * ``NINO.minified`` controls whether the output is minified or not.
 
@@ -42,6 +43,8 @@ In addition, there are some optional properties::
     0foo     ->  _0foo
     foo&bar  ->  foo_38_bar
     foo_bar  ->  foo__bar
+
+* ``NINO.Error`` lets you specify a custom function for errors. The first argument is the AST object that caused the error, and the second argument is the error message.
 
 Why use it?
 ===========
