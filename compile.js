@@ -1,8 +1,8 @@
 var NINO = (function (n) {
   "use strict"
 
-  n.Error = function (x, s) {
-    throw new Error(s + ": " + n.print(x))
+  n.error = function (x, s) {
+    return new Error(s + ": " + n.print(x))
   }
 
   n.setUnique = function (s, scope) {
@@ -466,15 +466,15 @@ var NINO = (function (n) {
     var len = x.args.length
     if ((min != null && len < min) || (max != null && len > max)) {
       if (max == null) {
-        throw new n.Error(x, "expected at least " + min + " argument but got " + len)
+        throw n.error(x, "expected at least " + min + " argument but got " + len)
       } else if (min == null) {
-        throw new n.Error(x, "expected at most " + max + " argument but got " + len)
+        throw n.error(x, "expected at most " + max + " argument but got " + len)
       }
 
       if (min === max) {
-        throw new n.Error(x, "expected " + min + " arguments but got " + len)
+        throw n.error(x, "expected " + min + " arguments but got " + len)
       } else {
-        throw new n.Error(x, "expected " + min + " to " + max + " arguments but got " + len)
+        throw n.error(x, "expected " + min + " to " + max + " arguments but got " + len)
       }
     }
   }
@@ -590,7 +590,7 @@ var NINO = (function (n) {
           return withPriority(x.unary, function () {
             var right = n.unwrap(x.args[0])
             if (x.unary === right.unary) {
-              throw new n.Error(x, "invalid assignment") // s2 + compile(right)
+              throw n.error(x, "invalid assignment") // s2 + compile(right)
             }
             return s + compile(right)
           })
@@ -599,7 +599,7 @@ var NINO = (function (n) {
             var left  = n.unwrap(x.args[0])
               , right = n.unwrap(x.args[1])
             if (x.binary === left.binary) {
-              throw new n.Error(x, "invalid left hand side for assignment")
+              throw n.error(x, "invalid left hand side for assignment")
                                    /*
                                    compile(left) + ")" +
                                    n.minify(" ") + s2 + n.minify(" ") +
@@ -701,7 +701,7 @@ var NINO = (function (n) {
 
             if (o.order === "right") {
               if (x.binary === left.binary) {
-                throw new n.Error(x, "invalid left hand side for assignment")
+                throw n.error(x, "invalid left hand side for assignment")
                                      /*
                                      compile(left) + ")" +
                                      n.minify(" ") + s2 + n.minify(" ") +
@@ -1179,17 +1179,17 @@ var NINO = (function (n) {
   stmt("throw", true)
   stmt("break", true, function (x) {
     if (!scope.loop) {
-      throw new n.Error(x, "must be inside of a loop")
+      throw n.error(x, "must be inside of a loop")
     }
   })
   stmt("continue", true, function (x) {
     if (!scope.loop) {
-      throw new n.Error(x, "must be inside of a loop")
+      throw n.error(x, "must be inside of a loop")
     }
   })
   stmt("return", true, function (x) {
     if (!scope.function) {
-      throw new n.Error(x, "must be inside of a function")
+      throw n.error(x, "must be inside of a function")
     }
   })
 
@@ -1674,13 +1674,13 @@ var NINO = (function (n) {
       spliceBlock(x, 0)
       var first = n.unwrap(x.args[0])
       if (first.op !== "var" && !first.isVariable) {
-        throw new n.Error(x.args[0], "must be a variable or (var ...)")
+        throw n.error(x.args[0], "must be a variable or (var ...)")
       }
       if (first.op === "var") {
         if (first.args.length === 1 && n.unwrap(first.args[0]).isVariable) {
           x.args[0] = n.wrap(x.args[0], blockStatement(first))
         } else {
-          throw new n.Error(x.args[0], "invalid assignment")
+          throw n.error(x.args[0], "invalid assignment")
         }
       } else {
         x.args[0] = n.wrap(x.args[0], expression(first))

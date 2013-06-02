@@ -29,7 +29,7 @@ In addition, there are some optional properties::
   NINO.warnings = true
   NINO.builtins = { ... }
   NINO.mangle   = function (s) { ... }
-  NINO.Error    = function (x, s) { ... }
+  NINO.error    = function (x, s) { ... }
 
 * ``NINO.minified`` controls whether the output is minified or not.
 
@@ -44,7 +44,7 @@ In addition, there are some optional properties::
     foo&bar  ->  foo_38_bar
     foo_bar  ->  foo__bar
 
-* ``NINO.Error`` lets you specify a custom function for errors. The first argument is the AST object that caused the error, and the second argument is the error message.
+* ``NINO.error`` lets you specify a custom function for errors. The first argument is the AST object that caused the error, and the second argument is the error message. Whatever the function returns is thrown.
 
 Why use it?
 ===========
