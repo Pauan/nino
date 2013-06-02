@@ -5,7 +5,7 @@ var NINO = (function (n) {
     return new Error(s + ": " + n.print(x))
   }
 
-  n.setUnique = function (s, scope) {
+  n.getUnique = function (s, scope) {
     var s2 = s
       , i  = 2
     while (scope[s2]) {
@@ -1077,7 +1077,7 @@ var NINO = (function (n) {
     compile: function (x) {
       if (x.string == null) {
         if (x.args[0] != null && !n.minified) {
-          x.string = n.setUnique(mangle(x.args[0]), n.scope)
+          x.string = n.getUnique(mangle(x.args[0]), n.scope)
         } else {
           x.string = getUniq(n.scope)
         }
