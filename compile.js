@@ -88,7 +88,11 @@ var NINO = (function (n) {
 
   n.print = function (x) {
     if (x.op === "unique") {
-      return x.args[0] // TODO
+      if (x.args[0] == null) {
+        return "<unique>"
+      } else {
+        return x.args[0] // TODO
+      }
     } else if (x.isLiteral) {
       return x.compile(x)
     } else if (x.op === "wrapper") {
@@ -501,6 +505,36 @@ var NINO = (function (n) {
 
         if (x.args.length) {
           spliceBlock(x, 0)
+        }
+
+        if (x.args.length > 0) {
+          var y = x.args[0]
+          if (y.op === "if" &&
+              y.args.length > 1 &&
+              (isStatement(y.args[1]) ||
+               (y.args.length > 2 && isStatement(y.args[2])))) {
+            y.args[1] = NINO.op(s, y.args[1])
+            if (y.args.length > 2) {
+              y.args[2] = NINO.op(s, y.args[2])
+            } else if (!(x.isLast && s === "return")) {
+              y.args[2] = NINO.op(s)
+            }
+            statement(y)
+            return
+          } else if (y.op === "try") {
+            y.args[0] = NINO.op(s, y.args[0])
+            y.args.slice(1).forEach(function (y, i) {
+              if (y.op === "catch") {
+                if (y.args.length > 1) {
+                  y.args[1] = NINO.op(s, y.args[1])
+                } else if (!(x.isLast && s === "return")) {
+                  y.args[1] = NINO.op(s)
+                }
+              }
+            })
+            statement(y)
+            return
+          }
         }
 
         x.args = x.args.map(expression)
@@ -1749,7 +1783,15 @@ var NINO = (function (n) {
     isStatement: true,
     statement: function (x) {
       argumentError(x, 1)
+      var seen = {}
       x.args = x.args.map(function (x, i) {
+        if (seen[x.op]) {
+          throw n.error(x, "cannot have two of the same operator in a try block")
+        }
+        seen[x.op] = true
+        if (x.op === "catch" && seen["finally"]) {
+          throw n.error(x, "catch must be before finally")
+        }
         if (i === 0) {
           return blockStatement(x)
         } else {
