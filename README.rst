@@ -61,9 +61,11 @@ If you're designing a language that compiles to JavaScript, you have to deal wit
 
 Instead, let Nino handle all of that. Some cool features that Nino has:
 
+* Generates *very* short and *very* fast JavaScript.
+
 * With a single line of code you can choose whether to output a normal or minified string: no need for a separate minifier.
 
-* Generates *very* short and *very* fast JavaScript.
+* You can also use ``parse.js`` to parse JavaScript code into a Nino AST. Then you can run it through the Nino compiler to produce fast and short minified JavaScript.
 
 * In addition to a ``"variable"`` datatype, Nino also has a ``"unique"`` datatype. The only difference is that a ``"unique"`` is guaranteed to never collide with any other variable [#uniques]_. If you've used Lisps, a ``"unique"`` is exactly the same as a gensym.
 

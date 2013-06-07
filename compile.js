@@ -507,6 +507,8 @@ var NINO = (function (n) {
           spliceBlock(x, 0)
         }
 
+        var b = (x.isLast && s === "return") // TODO hacky
+
         if (x.args.length > 0) {
           var y = x.args[0]
           if (y.op === "if" &&
@@ -516,7 +518,7 @@ var NINO = (function (n) {
             y.args[1] = NINO.op(s, y.args[1])
             if (y.args.length > 2) {
               y.args[2] = NINO.op(s, y.args[2])
-            } else if (!(x.isLast && s === "return")) {
+            } else if (!b) {
               y.args[2] = NINO.op(s)
             }
             statement(y)
@@ -527,7 +529,7 @@ var NINO = (function (n) {
               if (y.op === "catch") {
                 if (y.args.length > 1) {
                   y.args[1] = NINO.op(s, y.args[1])
-                } else if (!(x.isLast && s === "return")) {
+                } else if (!b) {
                   y.args[1] = NINO.op(s)
                 }
               }
@@ -548,8 +550,8 @@ var NINO = (function (n) {
             x.args.shift()
           }
         }
-                          // TODO ew
-        if (!(x.isLast && s === "return" && x.args.length === 0)) {
+
+        if (!(b && x.args.length === 0)) {
           statements.push(x)
         }
       },
@@ -790,11 +792,16 @@ var NINO = (function (n) {
       if (type === "statement") {
         statement(x)
       } else if (type === "expression") {
-        if (x.op === ",") {
-          topStatement(x)
-        } else {
-          statements.push(expression(x))
-        }
+        ;(function (w) {
+          var x = n.unwrap(w)
+          if (x.op === ",") {
+            x.args.forEach(function (x) {
+              statements.push(x)
+            })
+          } else {
+            statements.push(w)
+          }
+        })(expression(x))
       }
       var a = []
         , r = []
@@ -978,15 +985,6 @@ var NINO = (function (n) {
       x.statement(x)
     } else {
       statements.push(expression(w))
-    }
-  }
-
-  function topStatement(w) {
-    var x = n.unwrap(w)
-    if (x.topStatement) {
-      x.topStatement(x)
-    } else {
-      statement(w)
     }
   }
 
@@ -1228,9 +1226,6 @@ var NINO = (function (n) {
   })
 
   n.makeOp("empty", {
-    topStatement: function (x) {
-      statements.push(expression(x))
-    },
     statement: function (x) {
       argumentError(x, 0, 0)
     },
@@ -1260,10 +1255,6 @@ var NINO = (function (n) {
   })
 
   n.makeOp(",", {
-    topStatement: function (x) {
-      argumentError(x, 1)
-      x.args.forEach(topStatement)
-    },
     statement: function (x) {
       argumentError(x, 1)
       x.args.forEach(statement)
@@ -1275,13 +1266,17 @@ var NINO = (function (n) {
       } else {
         var len = x.args.length - 1
           , r   = []
-        x.args.forEach(function (x, i) {
-          var y = expression(x)
-          if (i !== len) {
-            useless(y)
-          }
-          if (i === len || n.unwrap(x).op !== "empty") {
-            r.push(y)
+        x.args.forEach(function anon(x, i) {
+          if (n.unwrap(x).op === ",") {
+            x.args.forEach(anon)
+          } else {
+            var y = expression(x)
+            if (i !== len) {
+              useless(y)
+            }
+            if (i === len || n.unwrap(x).op !== "empty") {
+              r.push(y)
+            }
           }
         })
         x.args = r
