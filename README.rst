@@ -187,7 +187,7 @@ Why use it?
 
       1 ? 2 : 3
 
-  * ``"<"``, ``"<="``, ``">"``, ``">="``, ``"=="``, ``"!="``, ``"==="``, and ``"!=="`` all support more than 2 arguments with the following behavior::
+  * ``"<"``, ``"<="``, ``">"``, ``">="``, ``"=="``, ``"!="``, ``"==="``, and ``"!=="`` support more than 2 arguments with the following behavior::
 
       NINO.fromJSON(["<", 1, 2, 3, 4, 5])
 
@@ -280,10 +280,10 @@ Why use it?
 
    1. You can use ``NINO.parse`` followed by ``NINO.traverse`` on the JavaScript file. You don't need to compile it, only traverse it. This is the recommended approach.
 
-   2. You can manually add the global variables to the second argument to ``NINO.traverse`` and ``NINO.replace``. This runs the risk that you may miss some variables.
+   2. You can manually add the global variables to the second argument to ``NINO.traverse`` and ``NINO.replace``. This runs the risk that you may miss some variables, but is sometimes necessary.
 
    This only applies to *global uniques*: local uniques (defined inside of a function) are *always* guaranteed to *never* collide.
 
-   Secondly, Nino provides a way to *completely bypass* the compiler and *insert arbitrary JavaScript code*. *Any* variables defined in this way could potentially collide with uniques.
+   Secondly, Nino provides a way to *completely bypass* the compiler and *insert arbitrary JavaScript code*. **Any** variables defined in this way could potentially collide with uniques.
 
    In practice, however, as long as you properly call ``NINO.traverse`` on all the JavaScript files, uniques should not collide.

@@ -4,14 +4,14 @@
   // Universal Module Definition (UMD) to support AMD, CommonJS/Node.js,
   // and plain browser loading,
   if (typeof define === "function" && define.amd) {
-    define(["lib/esprima/esprima",
-            "lib/escodegen/escodegen",
-            "lib/esmangle/esmangle",
+    define(["./lib/esprima/esprima",
+            null, //"./lib/escodegen/escodegen",
+            null, //"./lib/esmangle/esmangle",
             "exports"], factory)
   } else if (typeof require !== "undefined" && typeof exports !== "undefined") {
-    factory(require("lib/esprima/esprima"),
-            require("lib/escodegen/escodegen"),
-            require("lib/esmangle/esmangle"),
+    factory(require("./lib/esprima/esprima"),
+            null, //require("./lib/escodegen/escodegen"),
+            null, //require("./lib/esmangle/esmangle"),
             exports)
   } else {
     if (typeof root.NINO === "undefined") {
@@ -1237,11 +1237,13 @@
     var a = [n.op(".", n.op(".", n.op("array"),
                                  n.literal("slice")),
                        n.literal("call")),
-             value,
-             n.literal(i)]
+             value]
     var len = iLen - 1
     if (i !== len) {
+      a.push(n.literal(i))
       a.push(n.literal(i - len))
+    } else if (i !== 0) {
+      a.push(n.literal(i))
     }
     destructure(r, x, n.opArray("call", a))
   }
