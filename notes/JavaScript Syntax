@@ -3,6 +3,41 @@ This is vital information when trying to compile to JavaScript.
 
 ---
 
+This isn't specific to JavaScript, and it's not a quirk, but it's still
+useful to know. Consider the following expression:
+
+  1 + (2 + 3)
+
+If you were trying to minify that, you can't safely remove the parentheses
+because of potential rounding errors and such with floating point numbers.
+However, if you flip the arguments, you get the same behavior sans parens:
+
+  2 + 3 + 1
+
+This results in smaller minified code. You can do this with all binary
+left-associative operators in JavaScript.
+
+Ordinarily you could do it with right-associative operators as well, but
+in JavaScript the only binary right-associative operators are for
+assignment, and the following is illegal:
+
+  (a = b) = 1
+
+---
+
+You have to be very careful with + and -:
+
+  + +1
+  1 + +2
+
+If a + or - is followed by another + or - and they aren't a ++ or --
+operator, you must wrap in parens:
+
+  +(+1)
+  1 + (+2)
+
+---
+
 function () { ... } may not appear on the left side of a statement. For
 instance, all the following are illegal:
 
@@ -27,7 +62,9 @@ expression in parentheses:
   (function () {}(5))
 
 This forces it to parse the function as an expression rather than as a
-statement. The following named functions are actually different:
+statement. This is true of object literals like {...} as well.
+
+The following named functions are actually different:
 
   function foo() {}
   (function foo() {})

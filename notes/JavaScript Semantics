@@ -12,3 +12,19 @@ But it's still not valid to call it with a string:
 However, it *is* valid if you coerce the string to a proper object:
 
   foo.apply(null, new String("ab"))
+
+---
+
+The following two expressions are the same:
+
+  foo.bar(...)
+  (foo.bar)(...)
+
+But these two are different!
+
+  foo.bar(...)
+  (0, foo.bar)(...)
+
+With the first expression, "this" will be bound to "foo", whereas with the second expression, "this" will be the global object! This means that it's equivalent to the following:
+
+  foo.bar.call(undefined, ...)

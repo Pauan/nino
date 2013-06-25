@@ -1027,7 +1027,7 @@
             var right = n.unwrap(x.args[0])
 
             if (x.unary === right.unary) {
-              if (o.wrap && x.op === right.op) {
+              if (o.wrap && x.op === right.op && right.args.length === 1) {
                 return s2 + "(" + compile(right) + ")"
               }
             }
@@ -1052,6 +1052,11 @@
               var temp = left
               left     = right
               right    = temp
+              if (o.wrap && x.op === right.op) {
+                return compileFn(left) +
+                       n.minify(" ") + s2 + n.minify(" ") +
+                       "(" + compile(right) + ")"
+              }
             }
 
             return compileFn(left) +
