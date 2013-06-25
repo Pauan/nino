@@ -1049,13 +1049,20 @@
                                      */
               }
             } else if (x.binary === right.binary) {
-              var temp = left
-              left     = right
-              right    = temp
-              if (o.wrap && x.op === right.op) {
-                return compileFn(left) +
+              if (x.binary === left.binary && left.args.length === 2) {
+                return "(" + compile(left) + ")" +
                        n.minify(" ") + s2 + n.minify(" ") +
                        "(" + compile(right) + ")"
+              } else {
+                var temp = left
+                left     = right
+                right    = temp
+                // TODO code duplication
+                if (o.wrap && x.op === right.op && right.args.length === 1) {
+                  return compileFn(left) +
+                         n.minify(" ") + s2 + n.minify(" ") +
+                         "(" + compile(right) + ")"
+                }
               }
             }
 

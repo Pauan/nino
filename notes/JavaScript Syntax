@@ -14,9 +14,12 @@ However, if you flip the arguments, you get the same behavior sans parens:
 
   2 + 3 + 1
 
-This results in smaller minified code. You can do this with all binary
-left-associative operators in JavaScript.
+This results in smaller minified code. But make sure not to flip them in
+the following situation:
 
+  (1 + 2) + (3 + 4)
+
+You can do this with all binary left-associative operators in JavaScript.
 Ordinarily you could do it with right-associative operators as well, but
 in JavaScript the only binary right-associative operators are for
 assignment, and the following is illegal:
