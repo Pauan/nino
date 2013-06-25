@@ -1,4 +1,25 @@
-var NINO = (function (n) {
+(function (root, factory) {
+  "use strict"
+
+  // Universal Module Definition (UMD) to support AMD, CommonJS/Node.js,
+  // and plain browser loading,
+  if (typeof define === "function" && define.amd) {
+    define(["lib/esprima/esprima",
+            "lib/escodegen/escodegen",
+            "lib/esmangle/esmangle",
+            "exports"], factory)
+  } else if (typeof require !== "undefined" && typeof exports !== "undefined") {
+    factory(require("lib/esprima/esprima"),
+            require("lib/escodegen/escodegen"),
+            require("lib/esmangle/esmangle"),
+            exports)
+  } else {
+    if (typeof root.NINO === "undefined") {
+      root.NINO = {}
+    }
+    factory(root.esprima, root.escodegen, root.esmangle, root.NINO)
+  }
+}(this, function (esprima, escodegen, esmangle, n) {
   "use strict"
 
   n.error = function (x, s) {
@@ -39,21 +60,142 @@ var NINO = (function (n) {
     return n.opArray(s, [].slice.call(arguments, 1))
   }
 
+  // TODO
+  n.fromAST = function (x) {
+  }
+
+  n.toAST = function (x) {
+  }
+
   n.fromJSON = function (x) {
-    if (typeof x === "number") {
-      return n.op("number", x)
-    } else if (typeof x === "string") {
-      return n.op("string", x)
+    if (typeof x === "number" || typeof x === "string") {
+      return n.literal(x)
     } else if (Array.isArray(x)) {
-      if (n.ops[x[0]].isLiteral) {
-        return n.opArray(x[0], x.slice(1))
-      } else {
-        return n.opArray(x[0], x.slice(1).map(n.fromJSON))
-      }
+      return n.opArray(x[0], x.slice(1).map(n.fromJSON))
     } else {
       return x
     }
   }
+
+  function makeLiteral(s, min, max, info) {
+    if (typeof info === "function") {
+      info = { compile: info }
+    }
+    info.expression = function (x) {
+      argumentError(x, min, max)
+      return x
+    }
+    info.isLiteral = true
+    info.op = s
+    n[s] = function (x) {
+      var y = Object.create(info)
+      y.args = [x]
+      if (info.init != null) {
+        info.init(y)
+      }
+      return y
+    }
+  }
+
+  makeLiteral("bypass", 1, 1, {
+    isImpure: true, // TODO
+    isStatement: true, // TODO
+    compile: function (x) {
+      return serialize(x.args[0])
+    }
+  })
+
+  makeLiteral("lineComment", 0, 1, {
+    isUseful: true,
+    noSemicolon: true,
+    compile: function (x) {
+      if (x.args[0] == null) {
+        return n.minify("//")
+      } else {
+        return n.minify("// " + x.args[0])
+      }
+    }
+  })
+
+  makeLiteral("blockComment", 0, 1, {
+    isUseful: true,
+    noSemicolon: true,
+    compile: function (x) {
+      if (x.args[0] == null) {
+        return "/**/"
+      } else {
+        return n.minify("/* " + x.args[0].replace(/\*\/|\n/g, function (s) {
+          if (s === "\n") {
+            return "\n" + n.space() + "   "
+          } else {
+            return "* /"
+          }
+        }) + " */")
+      }
+    }
+  })
+
+  makeLiteral("docComment", 0, 1, {
+    isUseful: true,
+    noSemicolon: true,
+    compile: function (x) {
+      if (x.args[0] == null) {
+        return "/**/"
+      } else {
+        return "/**\n" + n.space() + " * " + x.args[0].replace(/\*\/|\n/g, function (s) {
+          if (s === "\n") {
+            return "\n" + n.space() + " * "
+          } else {
+            return "* /"
+          }
+        }) + "\n" + n.space() + " */"
+      }
+    }
+  })
+
+  makeLiteral("variable", 1, 1, {
+    isVariable: true,
+    compile: function (x) {
+      return mangle(x.args[0])
+    }
+  })
+
+  makeLiteral("unique", 0, 1, {
+    isVariable: true,
+    init: function (x) {
+      x.id = ++uniqueIds
+    },
+    compile: function (x) {
+      throw n.error(x, "cannot compile unique, use NINO.replace")
+    }
+  })
+
+  makeLiteral("literal", 1, 1, function (x) {
+    var y = x.args[0]
+    if (typeof y === "string") {
+      return "\"" + y.replace(/["\\\b\f\n\r\t\v]/g, function (s) {
+        if (s === "\"" || s === "\\") {
+          return "\\" + s
+        } else if (s === "\b") {
+          return "\\b"
+        } else if (s === "\f") {
+          return "\\f"
+        } else if (s === "\n") {
+          return "\\n"
+        } else if (s === "\r") {
+          return "\\r"
+        } else if (s === "\t") {
+          return "\\t"
+        } else if (s === "\v") {
+          return "\\v"
+        }
+      }) + "\""
+    } else if ({}.toString.call(y) === "[object RegExp]") {
+      return "/" + y.replace(/[\/\\]/g, "\\$&") + "/"
+    } else {
+      return "" + y
+    }
+  })
 
   n.makeOp = function (s, info) {
     info.op = s
@@ -63,9 +205,32 @@ var NINO = (function (n) {
   n.minified = false
   n.warnings = true
 
+  /*
+    Generated with:
+
+      ;(function (self) {
+        var seen = {}
+        while (self !== null && self !== Object.prototype) {
+          Object.getOwnPropertyNames(self).forEach(function (s) {
+            seen[s] = true
+          })
+          self = Object.getPrototypeOf(self)
+        }
+        return Object.keys(seen).sort(function (x, y) {
+          return x.toLocaleLowerCase().localeCompare(y.toLocaleLowerCase())
+        }).join(" ")
+      })(this)
+  */
   n.builtins = (function (n) {
-    "Number Math Boolean TypeError String Int16Array Float32Array isFinite Array DataView Float64Array ReferenceError SyntaxError Int32Array Uint16Array clearTimeout decodeURIComponent Uint32Array setTimeout eval console URIError unescape Date escape encodeURI Error Int8Array EvalError RangeError NaN isNaN parseInt undefined Object Uint8ClampedArray parseFloat Uint8Array clearInterval Infinity JSON Function setInterval encodeURIComponent decodeURI ArrayBuffer RegExp".split(" ").forEach(function (x) { n[x] = true })
-    n["arguments"] = true
+    "Array ArrayBuffer Boolean clearInterval clearTimeout console DataView Date decodeURI decodeURIComponent encodeURI encodeURIComponent Error escape eval EvalError Float32Array Float64Array Function Infinity Int16Array Int32Array Int8Array isFinite isNaN JSON Math NaN Number Object parseFloat parseInt RangeError ReferenceError RegExp setInterval setTimeout String SyntaxError TypeError Uint16Array Uint32Array Uint8Array Uint8ClampedArray undefined unescape URIError".split(" ").forEach(function (x) { n[x] = true })
+    //n["arguments"] = true
+
+    // Chrome 27.0.1453.6
+    "addEventListener alert applicationCache ArrayBufferView atob Attr Audio AudioProcessingEvent AutocompleteErrorEvent BeforeLoadEvent Blob blur btoa cancelAnimationFrame CanvasGradient CanvasPattern CanvasRenderingContext2D captureEvents CDATASection CharacterData chrome clientInformation ClientRect ClientRectList Clipboard close closed CloseEvent Comment CompositionEvent confirm Counter crypto CSSCharsetRule CSSFontFaceRule CSSHostRule CSSImportRule CSSMediaRule CSSPageRule CSSPrimitiveValue CSSRule CSSRuleList CSSStyleDeclaration CSSStyleRule CSSStyleSheet CSSValue CSSValueList CustomEvent defaultStatus defaultstatus DeviceOrientationEvent devicePixelRatio dispatchEvent document Document DocumentFragment DocumentType DOMException DOMImplementation DOMParser DOMSettableTokenList DOMStringList DOMStringMap DOMTokenList Element Entity EntityReference ErrorEvent Event event EventException EventSource external File FileError FileList FileReader find focus FocusEvent FormData frameElement frames getComputedStyle getMatchedCSSRules getSelection HashChangeEvent history HTMLAllCollection HTMLAnchorElement HTMLAppletElement HTMLAreaElement HTMLAudioElement HTMLBaseElement HTMLBaseFontElement HTMLBodyElement HTMLBRElement HTMLButtonElement HTMLCanvasElement HTMLCollection HTMLContentElement HTMLDataListElement HTMLDirectoryElement HTMLDivElement HTMLDListElement HTMLDocument HTMLElement HTMLEmbedElement HTMLFieldSetElement HTMLFontElement HTMLFormControlsCollection HTMLFormElement HTMLFrameElement HTMLFrameSetElement HTMLHeadElement HTMLHeadingElement HTMLHRElement HTMLHtmlElement HTMLIFrameElement HTMLImageElement HTMLInputElement HTMLKeygenElement HTMLLabelElement HTMLLegendElement HTMLLIElement HTMLLinkElement HTMLMapElement HTMLMarqueeElement HTMLMediaElement HTMLMenuElement HTMLMetaElement HTMLMeterElement HTMLModElement HTMLObjectElement HTMLOListElement HTMLOptGroupElement HTMLOptionElement HTMLOptionsCollection HTMLOutputElement HTMLParagraphElement HTMLParamElement HTMLPreElement HTMLProgressElement HTMLQuoteElement HTMLScriptElement HTMLSelectElement HTMLShadowElement HTMLSourceElement HTMLSpanElement HTMLStyleElement HTMLTableCaptionElement HTMLTableCellElement HTMLTableColElement HTMLTableElement HTMLTableRowElement HTMLTableSectionElement HTMLTemplateElement HTMLTextAreaElement HTMLTitleElement HTMLTrackElement HTMLUListElement HTMLUnknownElement HTMLVideoElement IDBCursor IDBCursorWithValue IDBDatabase IDBFactory IDBIndex IDBKeyRange IDBObjectStore IDBOpenDBRequest IDBRequest IDBTransaction IDBVersionChangeEvent Image ImageData indexedDB innerHeight innerWidth Intl KeyboardEvent length localStorage location locationbar matchMedia MediaController MediaError MediaKeyError MediaKeyEvent MediaList MediaStreamEvent menubar MessageChannel MessageEvent MessagePort MimeType MimeTypeArray MouseEvent moveBy moveTo MutationEvent MutationObserver name NamedNodeMap navigator Node NodeFilter NodeList Notation Notification OfflineAudioCompletionEvent offscreenBuffering onabort onbeforeunload onblur oncanplay oncanplaythrough onchange onclick oncontextmenu ondblclick ondeviceorientation ondrag ondragend ondragenter ondragleave ondragover ondragstart ondrop ondurationchange onemptied onended onerror onfocus onhashchange oninput oninvalid onkeydown onkeypress onkeyup onload onloadeddata onloadedmetadata onloadstart onmessage onmousedown onmousemove onmouseout onmouseover onmouseup onmousewheel onoffline ononline onpagehide onpageshow onpause onplay onplaying onpopstate onprogress onratechange onreset onresize onscroll onsearch onseeked onseeking onselect onstalled onstorage onsubmit onsuspend ontimeupdate ontransitionend onunload onvolumechange onwaiting onwebkitanimationend onwebkitanimationiteration onwebkitanimationstart onwebkittransitionend open openDatabase opener Option outerHeight outerWidth OverflowEvent PageTransitionEvent pageXOffset pageYOffset parent performance PERSISTENT personalbar Plugin PluginArray PopStateEvent postMessage print ProcessingInstruction ProgressEvent prompt Range RangeException Rect releaseEvents removeEventListener requestAnimationFrame resizeBy resizeTo RGBColor RTCIceCandidate RTCSessionDescription screen screenLeft screenTop screenX screenY scroll scrollbars scrollBy scrollTo scrollX scrollY Selection self sessionStorage SharedWorker showModalDialog SpeechInputEvent SQLException status statusbar stop Storage StorageEvent styleMedia StyleSheet StyleSheetList SVGAElement SVGAltGlyphDefElement SVGAltGlyphElement SVGAltGlyphItemElement SVGAngle SVGAnimateColorElement SVGAnimatedAngle SVGAnimatedBoolean SVGAnimatedEnumeration SVGAnimatedInteger SVGAnimatedLength SVGAnimatedLengthList SVGAnimatedNumber SVGAnimatedNumberList SVGAnimatedPreserveAspectRatio SVGAnimatedRect SVGAnimatedString SVGAnimatedTransformList SVGAnimateElement SVGAnimateMotionElement SVGAnimateTransformElement SVGCircleElement SVGClipPathElement SVGColor SVGComponentTransferFunctionElement SVGCursorElement SVGDefsElement SVGDescElement SVGDocument SVGElement SVGElementInstance SVGElementInstanceList SVGEllipseElement SVGException SVGFEBlendElement SVGFEColorMatrixElement SVGFEComponentTransferElement SVGFECompositeElement SVGFEConvolveMatrixElement SVGFEDiffuseLightingElement SVGFEDisplacementMapElement SVGFEDistantLightElement SVGFEDropShadowElement SVGFEFloodElement SVGFEFuncAElement SVGFEFuncBElement SVGFEFuncGElement SVGFEFuncRElement SVGFEGaussianBlurElement SVGFEImageElement SVGFEMergeElement SVGFEMergeNodeElement SVGFEMorphologyElement SVGFEOffsetElement SVGFEPointLightElement SVGFESpecularLightingElement SVGFESpotLightElement SVGFETileElement SVGFETurbulenceElement SVGFilterElement SVGFontElement SVGFontFaceElement SVGFontFaceFormatElement SVGFontFaceNameElement SVGFontFaceSrcElement SVGFontFaceUriElement SVGForeignObjectElement SVGGElement SVGGlyphElement SVGGlyphRefElement SVGGradientElement SVGHKernElement SVGImageElement SVGLength SVGLengthList SVGLinearGradientElement SVGLineElement SVGMarkerElement SVGMaskElement SVGMatrix SVGMetadataElement SVGMissingGlyphElement SVGMPathElement SVGNumber SVGNumberList SVGPaint SVGPathElement SVGPathSeg SVGPathSegArcAbs SVGPathSegArcRel SVGPathSegClosePath SVGPathSegCurvetoCubicAbs SVGPathSegCurvetoCubicRel SVGPathSegCurvetoCubicSmoothAbs SVGPathSegCurvetoCubicSmoothRel SVGPathSegCurvetoQuadraticAbs SVGPathSegCurvetoQuadraticRel SVGPathSegCurvetoQuadraticSmoothAbs SVGPathSegCurvetoQuadraticSmoothRel SVGPathSegLinetoAbs SVGPathSegLinetoHorizontalAbs SVGPathSegLinetoHorizontalRel SVGPathSegLinetoRel SVGPathSegLinetoVerticalAbs SVGPathSegLinetoVerticalRel SVGPathSegList SVGPathSegMovetoAbs SVGPathSegMovetoRel SVGPatternElement SVGPoint SVGPointList SVGPolygonElement SVGPolylineElement SVGPreserveAspectRatio SVGRadialGradientElement SVGRect SVGRectElement SVGRenderingIntent SVGScriptElement SVGSetElement SVGStopElement SVGStringList SVGStyleElement SVGSVGElement SVGSwitchElement SVGSymbolElement SVGTextContentElement SVGTextElement SVGTextPathElement SVGTextPositioningElement SVGTitleElement SVGTransform SVGTransformList SVGTRefElement SVGTSpanElement SVGUnitTypes SVGUseElement SVGViewElement SVGViewSpec SVGVKernElement SVGZoomAndPan SVGZoomEvent TEMPORARY Text TextEvent TextMetrics TextTrack TextTrackCue TextTrackCueList TextTrackList TimeRanges toolbar top TrackEvent TransitionEvent UIEvent URL v8Intl WebGLActiveInfo WebGLBuffer WebGLContextEvent WebGLFramebuffer WebGLProgram WebGLRenderbuffer WebGLRenderingContext WebGLShader WebGLShaderPrecisionFormat WebGLTexture WebGLUniformLocation WebKitAnimationEvent webkitAudioContext webkitAudioPannerNode webkitCancelAnimationFrame webkitCancelRequestAnimationFrame webkitConvertPointFromNodeToPage webkitConvertPointFromPageToNode WebKitCSSFilterRule WebKitCSSFilterValue WebKitCSSKeyframeRule WebKitCSSKeyframesRule WebKitCSSMatrix WebKitCSSMixFunctionValue WebKitCSSTransformValue webkitIDBCursor webkitIDBDatabase webkitIDBFactory webkitIDBIndex webkitIDBKeyRange webkitIDBObjectStore webkitIDBRequest webkitIDBTransaction webkitIndexedDB WebKitMediaSource webkitMediaStream WebKitMutationObserver webkitNotifications webkitOfflineAudioContext WebKitPoint webkitRequestAnimationFrame webkitRequestFileSystem webkitResolveLocalFileSystemURL webkitRTCPeerConnection WebKitShadowRoot WebKitSourceBuffer WebKitSourceBufferList webkitSpeechGrammar webkitSpeechGrammarList webkitSpeechRecognition webkitSpeechRecognitionError webkitSpeechRecognitionEvent webkitStorageInfo WebKitTransitionEvent webkitURL WebSocket WheelEvent Window window Worker XMLDocument XMLHttpRequest XMLHttpRequestException XMLHttpRequestProgressEvent XMLHttpRequestUpload XMLSerializer XPathEvaluator XPathException XPathResult XSLTProcessor".split(" ").forEach(function (x) { n[x] = true })
+
+    // Node.js 0.8.5
+    "Buffer global GLOBAL module process require root".split(" ").forEach(function (x) { n[x] = true })
+
     return n
   })({})
 
@@ -120,33 +285,27 @@ var NINO = (function (n) {
     }
   }
 
-  n.compile = function (x, scope, type) {
-    return withVars(scope, function () {
-      return compileFn(blockWith(x, type))
-    })
+  n.expression = function (x) {
+    return blockWith(x, "expression")
+  }
+
+  n.statement = function (x) {
+    return blockWith(x, "statement")
+  }
+
+  n.compile = function (x) {
+    return compileFn(x)
   }
 
   n.traverse = function (x, scope) {
-    var scopes = [{ scope: scope, bound: {} }]
+    var scopes = [{ seen: scope, bound: {} }]
 
-    function find(x) {
-      var i = scopes.length
-        , index
-      while (i--) {
-        if (scopes[i].uniques && (index = scopes[i].uniques.indexOf(x)) !== -1) {
-          return scopes[i].replace[index]
-        }
-      }
-      return x
-    }
-
-    function seen(w) {
-      var x = n.unwrap(w)
+    function seen(x) {
       if (x.op === "variable") {
         var s = compile(x)
           , i = scopes.length
         while (i--) {
-          scopes[i].scope[s] = true
+          scopes[i].seen[s] = true
           if (scopes[i].bound[s]) {
             break
           }
@@ -156,44 +315,26 @@ var NINO = (function (n) {
 
     function bind(w) {
       var last = scopes[scopes.length - 1]
-      var x = n.unwrap(w)
+        , x    = n.unwrap(w)
       if (x.op === "variable") {
         last.bound[compile(x)] = true
         seen(x)
-        return n.wrap(w, x)
-      } else if (x.op === "unique" && last.uniques) {
-        var y = find(x)
-        if (y === x) {
-          y = n.opArray("unique", x.args)
-          last.uniques.push(x)
-          last.replace.push(y)
+      } else if (x.op === "unique") {
+        if (last.uniques != null) {
+          last.uniques[x.id] = true
         }
-        return n.wrap(w, y)
-      } else {
-        return n.wrap(w, x)
       }
+      return w
     }
 
     function withScope(x, f) {
-      scopes.push({ scope: x, bound: {}, uniques: [], replace: [] })
+      scopes.push({ seen:    x.seenVariables
+                  , uniques: x.boundUniques
+                  , bound:   {} })
       try {
-        return f()
+        f()
       } finally {
         scopes.pop()
-      }
-    }
-
-    function traverse1(w) {
-      var x = n.unwrap(w)
-      if (x.isLiteral) {
-        if (x.op === "unique") {
-          return n.wrap(w, find(x))
-        } else {
-          return n.wrap(w, x)
-        }
-      } else {
-        x.args = x.args.map(traverse1)
-        return n.wrap(w, x)
       }
     }
 
@@ -201,21 +342,28 @@ var NINO = (function (n) {
       var x = n.unwrap(w)
       if (x.isLiteral) {
         seen(x)
-        return n.wrap(w, x)
       } else if (x.op === "function") {
-        x.scope = {}
-        withScope(x.scope, function () {
+        x.seenVariables = {}
+        x.boundUniques = {}
+        withScope(x, function () {
+          seen(n.variable("arguments"))
           var args = n.unwrap(x.args[0])
           args.args = args.args.map(bind)
-          x.args[1] = traverse1(traverse(x.args[1]))
+          if (x.args.length > 1) {
+            x.args[1] = traverse(x.args[1])
+          }
         })
       } else if (x.op === "function-var") {
         x.args[0] = bind(x.args[0])
-        x.scope = {}
-        withScope(x.scope, function () {
+        x.seenVariables = {}
+        x.boundUniques = {}
+        withScope(x, function () {
+          seen(n.variable("arguments"))
           var args = n.unwrap(x.args[1])
           args.args = args.args.map(bind)
-          x.args[2] = traverse1(traverse(x.args[2]))
+          if (x.args.length > 2) {
+            x.args[2] = traverse(x.args[2])
+          }
         })
       } else if (x.op === "var") {
         x.args = x.args.map(function (w) {
@@ -223,32 +371,140 @@ var NINO = (function (n) {
           if (x.op === "=") {
             x.args[0] = bind(x.args[0])
             x.args[1] = traverse(x.args[1]) // TODO
-            return n.wrap(w, x)
+            return w
           } else {
             return n.wrap(w, bind(x))
           }
         })
       /* TODO
       } else if (x.op === "catch") {
-        // scopes[scopes.length - 1].scope
-        x.scope = {}
-        withScope(x.scope, function () {
+        // scopes[scopes.length - 1].seen
+        x.seenVariables = {}
+        withScope(x.seenVariables, function () {
           x.args[0] = bind(x.args[0])
           x.args[1] = traverse(x.args[1])
         })*/
       } else {
         x.args = x.args.map(traverse)
       }
-      return n.wrap(w, x)
+      return w
+    }
+
+    return traverse(x)
+  }
+
+  n.replace = function (x, scope) {
+    var replace = {}
+      , uniques
+
+    function withScope(x, f) {
+      var old  = replace
+        , old2 = scope
+        , old3 = uniques
+      replace = Object.create(replace)
+      scope   = x.seenVariables
+      uniques = x.boundUniques
+      try {
+        f()
+      } finally {
+        replace = old
+        scope   = old2
+        uniques = old3
+      }
+    }
+
+    function seen(w) {
+      var x = n.unwrap(w)
+      if (x.op === "unique") {
+        var s = replace[x.id]
+        if (s == null) {
+          s = replace[x.id] = (x.args[0] != null && !n.minified
+                                ? n.getUnique(mangle(x.args[0]), scope)
+                                : getUniq(scope))
+        }
+        scope[s] = true
+        return n.wrap(w, n.variable(s)) // TODO clone
+      } else {
+        return w
+      }
+    }
+
+    function binder(w) {
+      var x = n.unwrap(w)
+      if (x.isLiteral) {
+        if (x.op === "unique") {
+          if (replace[x.id] != null) {
+            if (uniques[x.id]) {
+              delete scope[replace[x.id]]
+              replace[x.id] = null
+            } else {
+              scope[replace[x.id]] = true
+            }
+          }
+        }
+      } else {
+        x.args.forEach(binder)
+      }
+    }
+
+    function traverse(w) {
+      var x = n.unwrap(w)
+      if (x.isLiteral) {
+        return seen(w)
+      } else if (x.op === "function") {
+        withScope(x, function () {
+          var args = n.unwrap(x.args[0])
+
+          args.args.forEach(binder)
+          if (x.args.length > 1) {
+            binder(x.args[1])
+          }
+
+          args.args = args.args.map(seen)
+          if (x.args.length > 1) {
+            x.args[1] = traverse(x.args[1])
+          }
+        })
+      } else if (x.op === "function-var") {
+        x.args[0] = seen(x.args[0]) // TODO test this
+        withScope(x, function () {
+          var args = n.unwrap(x.args[1])
+
+          args.args.forEach(binder)
+          if (x.args.length > 2) {
+            binder(x.args[2])
+          }
+
+          args.args = args.args.map(seen)
+          if (x.args.length > 2) {
+            x.args[2] = traverse(x.args[2])
+          }
+        })
+      } else if (x.op === "var") {
+        x.args = x.args.map(function (w) {
+          var x = n.unwrap(w)
+          if (x.op === "=") {
+            x.args[0] = seen(x.args[0])
+            x.args[1] = traverse(x.args[1]) // TODO
+            return w
+          } else {
+            return n.wrap(w, seen(x))
+          }
+        })
+      } else {
+        x.args = x.args.map(traverse)
+      }
+      return w
     }
 
     return traverse(x)
   }
 
 
-  var indent   = 0
-    , priority = 0
-    , scope    = { loop: false, function: false }
+  var indent    = 0
+    , priority  = 0
+    , uniqueIds = 0
+    , scope     = { loop: false, function: false }
     , statements
     , expressions
 
@@ -377,12 +633,22 @@ var NINO = (function (n) {
   })*/
 
   function jsProp(w) {
-    var x = n.unwrap(w)
-    if (x.op === "string") {
-      var y = x.args[0]
+    var x = n.unwrap(w), y
+    if (x.op === "literal" && typeof (y = x.args[0]) === "string") {
       if (/^[$_a-zA-Z][$_a-zA-Z0-9]*$/.test(y)) {
         return y
       }
+    }
+  }
+
+  function propToString(w) {
+    var x = n.unwrap(w)
+    if (x.op === "literal") {
+      return x
+    } else if (x.op === "variable") {
+      return n.wrap(w, n.literal(x.args[0]))
+    } else {
+      throw n.error("expected literal or variable")
     }
   }
 
@@ -414,15 +680,13 @@ var NINO = (function (n) {
              : "{" + n.minify("\n") + block(x) + n.minify("\n") + n.space() + "}")
   }
 
-  function compileFunction(scope, name, args, body) {
+  function compileFunction(name, args, body) {
     return resetPriority(0, function () {
-      return withVars(scope, function () {
-        // n.changeScope(this.scope)
-        return withScope("function", function () {
-          args = n.unwrap(args).args.map(compile).join("," + n.minify(" "))
-          return "function" + (name ? " " + name : n.minify(" ")) + "(" +
-                   args + ")" + n.minify(" ") + withBraces(body)
-        })
+      // n.changeScope(this.scope)
+      return withScope("function", function () {
+        args = n.unwrap(args).args.map(compile).join("," + n.minify(" "))
+        return "function" + (name ? " " + name : n.minify(" ")) + "(" +
+                 args + ")" + n.minify(" ") + withBraces(body)
       })
     })
   }
@@ -481,18 +745,6 @@ var NINO = (function (n) {
         throw n.error(x, "expected " + min + " to " + max + " arguments but got " + len)
       }
     }
-  }
-
-  function makeLiteral(s, min, max, info) {
-    if (typeof info === "function") {
-      info = { compile: info }
-    }
-    info.expression = function (x) {
-      argumentError(x, min, max)
-      return x
-    }
-    info.isLiteral = true
-    n.makeOp(s, info)
   }
 
   function stmt(s, isBreak, f) {
@@ -563,7 +815,7 @@ var NINO = (function (n) {
           expressions.forEach(function (y) {
             if (isImpure(y)/* && !contains(y, x)*/) {
               statement(y)
-              y.args[0] = n.op("void", n.op("number", 0))
+              y.args[0] = n.op("void", n.literal(0))
             }
           })
         } else {
@@ -571,7 +823,7 @@ var NINO = (function (n) {
         }
         expressions = []
         statement(x)
-        return expression(n.op("void", n.op("number", 0)))
+        return expression(n.op("void", n.literal(0)))
       },
       compile: function (x) {
         if (f != null) {
@@ -598,6 +850,54 @@ var NINO = (function (n) {
     }
   }
 
+  function typer(args, ret) {
+    return function () {
+      return n.type("function", args.map(function (x) {
+        return n.type(x)
+      }), n.type(ret))
+    }
+  }
+
+  function concater(l, r) {
+    if (l.length === 0) {
+      if (r.length === 1) {
+        return r[0]
+      } else {
+        return n.opArray("call", n.op(".", r[0], n.literal("concat")),
+                                 r.slice(1))
+      }
+    } else {
+      l = n.opArray("array", l)
+      if (r.length === 0) {
+        return l
+      } else {
+        return n.opArray("call", n.op(".", l, n.literal("concat")), r)
+      }
+    }
+  }
+
+  function makeConcat(a, f) {
+    var r1 = []
+      , r2 = []
+      , seen
+    a.forEach(function (w) {
+      var x = n.unwrap(w)
+      if (x.op === "...") {
+        seen = true
+        r2.push(expression(x.args[0]))
+      } else if (seen) {
+        r2.push(expression(n.op("array", w)))
+      } else {
+        r1.push(expression(w))
+      }
+    })
+    if (seen) {
+      return f(concater(r1, r2), seen)
+    } else {
+      return f(r1, seen)
+    }
+  }
+
   function makeAssignOp(s, s2) {
     n.makeOp(s, {
       unary: 75,
@@ -613,7 +913,7 @@ var NINO = (function (n) {
         case 2:
           // TODO should this be before or after expression ?
           var y = n.unwrap(x.args[1])
-          if (y.op === "number" && y.args[0] === 1) {
+          if (y.op === "literal" && y.args[0] === 1) {
             x.args = [x.args[0]]
           }
           x.args = x.args.map(expression)
@@ -679,13 +979,13 @@ var NINO = (function (n) {
               var len = x.args.length - 1
                 , r   = []
               if (isImpure(x.args[0]) && x.args.slice(1).some(isImpure)) {
-                var u = n.op("unique")
+                var u = n.unique()
                 statements.push(n.op("var", n.op("=", u, x.args[0])))
                 x.args[0] = u
               }
               x.args.reduce(function (x, y, i) {
                 if (isImpure(y) && i !== len) {
-                  var u = n.op("unique")
+                  var u = n.unique()
                   statements.push(n.op("var", n.op("=", u, y)))
                   r.push(n.op(s, x, u))
                   return u
@@ -711,8 +1011,12 @@ var NINO = (function (n) {
           if (x.args.length === 1) {
             x.args[0] = expression(x.args[0])
           } else {
-            x.args[0] = expression(x.args[0])
-            x.args[1] = expression(x.args[1])
+            if (o.expression != null) {
+              return o.expression(x)
+            } else {
+              x.args[0] = expression(x.args[0])
+              x.args[1] = expression(x.args[1])
+            }
           }
           return x
         }
@@ -771,7 +1075,8 @@ var NINO = (function (n) {
           r = []
         }
         z = n.op("function-var", x.args[0], y.args[0], y.args[1])
-        z.scope = y.scope
+        z.seenVariables = y.seenVariables // TODO clone
+        z.boundUniques = y.boundUniques // TODO clone
         a.push(n.wrap(w, z))
       } else {
         r.push(n.wrap(w, x))
@@ -860,6 +1165,12 @@ var NINO = (function (n) {
     }
   }
 
+  // TODO better simple detection
+  function isSimple(w) {
+    var x = n.unwrap(w)
+    return x.op === "literal" || x.op === "unique" || x.op === "variable"
+  }
+
   function isImpure(w) {
     var x = n.unwrap(w)
     if (x.isImpure) {
@@ -879,17 +1190,6 @@ var NINO = (function (n) {
       return false
     } else {
       return x.args.some(isStatement)
-    }
-  }
-
-  // TODO rename
-  function withVars(x, f) {
-    var old = n.scope
-    n.scope = x
-    try {
-      return f()
-    } finally {
-      n.scope = old
     }
   }
 
@@ -913,6 +1213,81 @@ var NINO = (function (n) {
         return r
       }
     })
+  }
+
+  function withValue(r, x) {
+    if (!isSimple(x)) {
+      var u = n.unique()
+      r.push(n.op("var", n.op("=", u, x)))
+      return u
+    } else {
+      return x
+    }
+  }
+
+  function assignToVar(x) {
+    if (n.unwrap(x).op === "=") {
+      return n.op("var", x)
+    } else {
+      return x
+    }
+  }
+
+  function destructureSlice(r, x, value, i, iLen) {
+    var a = [n.op(".", n.op(".", n.op("array"),
+                                 n.literal("slice")),
+                       n.literal("call")),
+             value,
+             n.literal(i)]
+    var len = iLen - 1
+    if (i !== len) {
+      a.push(n.literal(i - len))
+    }
+    destructure(r, x, n.opArray("call", a))
+  }
+
+  function destructureLength(r, x, value, i) {
+    destructure(r, x, n.op(".", value,
+                                n.op("-", n.op(".", value, n.literal("length")),
+                                          n.literal(i))))
+  }
+
+  function destructure(r, pattern, value) {
+    var x = n.unwrap(pattern)
+    if (x.op === "array") {
+      value = withValue(r, value)
+      var i = 0, iLen = x.args.length
+      while (i < iLen) {
+        (function (w) {
+          var y = n.unwrap(w)
+          if (y.op === "...") {
+            destructureSlice(r, y.args[0], value, i, iLen)
+            ++i
+            while (i < iLen) {
+              destructureLength(r, x.args[i], value, iLen - i)
+              ++i
+            }
+          } else if (y.op !== "empty") {
+            destructure(r, w, n.op(".", value, n.literal(i)))
+          }
+        })(x.args[i])
+        ++i
+      }
+    } else if (x.op === "object") {
+      value = withValue(r, value)
+      x.args.forEach(function (w) {
+        var x = n.unwrap(w)
+        if (x.op === "=") {
+          destructure(r, x.args[1], n.op(".", value, propToString(x.args[0])))
+        } else {
+          destructure(r, x, n.op(".", value, propToString(x)))
+        }
+      })
+    } else if (x.isVariable) {
+      r.push(n.op("=", pattern, value))
+    } else {
+      throw n.error(pattern, "expected array, object, or variable")
+    }
   }
 
 /*
@@ -969,6 +1344,61 @@ var NINO = (function (n) {
   return 2
 */
 
+  function expressionFn(x, min, max) {
+    var args = n.unwrap(x.args[min])
+      , r    = []
+      , a    = []
+      , i    = 0
+      , iLen = args.args.length
+
+    while (i < iLen) {
+      (function (w) {
+        var x = n.unwrap(w)
+        if (x.isVariable) {
+          a.push(expression(w))
+        } else {
+          var u
+          if (x.op === "...") {
+            if (i === iLen - 1) {
+              u = n.variable("arguments")
+            } else {
+              u = n.unique()
+              r.push(n.op("var", n.op("=", u, n.variable("arguments"))))
+            }
+            destructureSlice(r, x.args[0], u, i, iLen)
+            ++i
+            while (i < iLen) {
+              x = args.args[i]
+              if (n.unwrap(x).op !== "empty") {
+                destructureLength(r, x, u, iLen - i)
+              }
+              ++i
+            }
+          } else {
+            u = n.unique()
+            if (x.op !== "empty") {
+              destructure(r, w, u)
+            }
+            a.push(expression(u))
+          }
+        }
+      })(args.args[i])
+      ++i
+    }
+    args.args = a
+
+    if (r.length) {
+      r = r.map(assignToVar)
+      if (x.args.length > max) {
+        r = r.concat([x.args[max]])
+      }
+      x.args[max] = n.opArray(",", r)
+    }
+    if (x.args.length > max) {
+      x.args[max] = functionStatement(x.args[max])
+    }
+  }
+
   function expression(w) {
     var x = n.unwrap(w)
       , y = x.expression(x)
@@ -991,7 +1421,7 @@ var NINO = (function (n) {
   function pushExpressions(x, f) {
     expressions.forEach(function (y) {
       if (/*!contains(y, x) && */f(y)) {
-        var u = n.op("unique")
+        var u = n.unique()
         statement(n.op("var", n.op("=", u, y.args[0])))
         y.args[0] = u
       }
@@ -1041,159 +1471,206 @@ var NINO = (function (n) {
   /**
    *  Operators
    */
-  makeLiteral("bypass", 1, 1, {
-    isImpure: true, // TODO
-    isStatement: true, // TODO
-    compile: function (x) {
-      return serialize(x.args[0])
-    }
-  })
-
-  makeLiteral("line-comment", 0, 1, {
-    isUseful: true,
-    noSemicolon: true,
-    compile: function (x) {
-      if (x.args[0] == null) {
-        return n.minify("//")
-      } else {
-        return n.minify("// " + x.args[0])
-      }
-    }
-  })
-
-  makeLiteral("block-comment", 0, 1, {
-    isUseful: true,
-    noSemicolon: true,
-    compile: function (x) {
-      if (x.args[0] == null) {
-        return "/**/"
-      } else {
-        return n.minify("/* " + x.args[0].replace(/\*\/|\n/g, function (s) {
-          if (s === "\n") {
-            return "\n" + n.space() + "   "
-          } else {
-            return "* /"
-          }
-        }) + " */")
-      }
-    }
-  })
-
-  makeLiteral("doc-comment", 0, 1, {
-    isUseful: true,
-    noSemicolon: true,
-    compile: function (x) {
-      if (x.args[0] == null) {
-        return "/**/"
-      } else {
-        return "/**\n" + n.space() + " * " + x.args[0].replace(/\*\/|\n/g, function (s) {
-          if (s === "\n") {
-            return "\n" + n.space() + " * "
-          } else {
-            return "* /"
-          }
-        }) + "\n" + n.space() + " */"
-      }
-    }
-  })
-
-  makeLiteral("variable", 1, 1, {
-    isVariable: true,
-    compile: function (x) {
-      return mangle(x.args[0])
-    }
-  })
-
-  makeLiteral("unique", 0, 1, {
-    isVariable: true,
-    compile: function (x) {
-      if (x.string == null) {
-        if (x.args[0] != null && !n.minified) {
-          x.string = n.getUnique(mangle(x.args[0]), n.scope)
-        } else {
-          x.string = getUniq(n.scope)
-        }
-        n.scope[x.string] = true
-      }
-      return x.string
-    }
-  })
-
-  makeLiteral("true", 0, 0, function () {
-    return "true"
-  })
-
-  makeLiteral("false", 0, 0, function () {
-    return "false"
-  })
-
-  makeLiteral("null", 0, 0, function () {
-    return "null"
-  })
-
-  makeLiteral("number", 1, 1, function (x) {
-    return x.args[0]
-  })
-
-  makeLiteral("string", 0, 1, function (x) {
-    if (x.args[0] == null) {
-      return "\"\""
-    } else {
-      return "\"" + x.args[0].replace(/["\\\b\f\n\r\t\v]/g, function (s) {
-        if (s === "\"" || s === "\\") {
-          return "\\" + s
-        } else if (s === "\b") {
-          return "\\b"
-        } else if (s === "\f") {
-          return "\\f"
-        } else if (s === "\n") {
-          return "\\n"
-        } else if (s === "\r") {
-          return "\\r"
-        } else if (s === "\t") {
-          return "\\t"
-        } else if (s === "\v") {
-          return "\\v"
-        }
-      }) + "\""
-    }
-  })
-
-  makeLiteral("regexp", 1, 1, function (x) {
-    return "/" + x.args[0].replace(/[\/\\]/g, "\\$&") + "/"
-  })
-
   n.makeOp("wrapper", {})
 
-  op("!",          { unary:  70, args: 1 })
-  op("~",          { unary:  70, args: 1 })
-  op("typeof",     { unary:  70, args: 1, name: "typeof " })
-  op("void",       { unary:  70, args: 1, name: "void " })
-  op("delete",     { unary:  70, args: 1, name: "delete ", isImpure: true })
-  op("*",          { binary: 65 })
-  op("/",          { binary: 65 })
-  op("%",          { binary: 65, args: 2 })
-  op("+",          { binary: 60, unary: 70, wrap: true })
-  op("-",          { binary: 60, unary: 70, wrap: true })
-  op("<<",         { binary: 55, args: 2 })
-  op(">>",         { binary: 55, args: 2 })
-  op(">>>",        { binary: 55, args: 2 })
-  op("<",          { binary: 50, pairwise: "&&" })
-  op("<=",         { binary: 50, pairwise: "&&" })
-  op(">",          { binary: 50, pairwise: "&&" })
-  op(">=",         { binary: 50, pairwise: "&&" })
-  op("in",         { binary: 50, args: 2, name: " in " })
-  op("instanceof", { binary: 50, args: 2, name: " instanceof " })
-  op("==",         { binary: 45, pairwise: "&&" })
-  op("!=",         { binary: 45, pairwise: "&&" })
-  op("===",        { binary: 45, pairwise: "&&" })
-  op("!==",        { binary: 45, pairwise: "&&" })
-  op("&",          { binary: 40, args: 2 })
-  op("^",          { binary: 35, args: 2 })
-  op("|",          { binary: 30, args: 2 })
-  op("&&",         { binary: 25 })
-  op("||",         { binary: 20 })
-  op("=",          { binary: 10, args: 2, order: "right", isImpure: true })
+  op("!", {
+    type: typer(["bool"], "bool"),
+    unary: 70,
+    args: 1
+  })
+
+  op("~", {
+    type: typer(["int"], "int"),
+    unary: 70,
+    args: 1
+  })
+
+  op("typeof", {
+    type: typer(["any"], "str"),
+    unary: 70,
+    args: 1,
+    name: "typeof "
+  })
+
+  op("void", {
+    type: typer(["any"], "void"),
+    unary: 70,
+    args: 1,
+    name: "void "
+  })
+
+  op("delete", {
+    type: typer(["any"], "bool"),
+    unary: 70,
+    args: 1,
+    name: "delete ",
+    isImpure: true
+  })
+
+  op("*", {
+    type: typer(["num", "num"], "num"),
+    binary: 65
+  })
+
+  op("/", {
+    type: typer(["num", "num"], "num"),
+    binary: 65
+  })
+
+  op("%", {
+    type: typer(["num", "num"], "num"),
+    binary: 65,
+    args: 2
+  })
+
+  op("+", {
+    type: typer(["strnum", "strnum"], ["|", "num", "str"]),
+    binary: 60,
+    unary: 70,
+    wrap: true
+  })
+
+  op("-", {
+    type: typer(["num", "num"], "num"),
+    binary: 60,
+    unary: 70,
+    wrap: true
+  })
+
+  op("<<", {
+    type: typer(["int", "int"], "int"),
+    binary: 55,
+    args: 2
+  })
+
+  op(">>", {
+    type: typer(["int", "int"], "int"),
+    binary: 55,
+    args: 2
+  })
+
+  op(">>>", {
+    type: typer(["int", "int"], "int"),
+    binary: 55,
+    args: 2
+  })
+
+  op("<", {
+    type: typer(["strnum", "strnum"], "bool"),
+    binary: 50,
+    pairwise: "&&"
+  })
+
+  op("<=", {
+    type: typer(["strnum", "strnum"], "bool"),
+    binary: 50,
+    pairwise: "&&"
+  })
+
+  op(">", {
+    type: typer(["strnum", "strnum"], "bool"),
+    binary: 50,
+    pairwise: "&&"
+  })
+
+  op(">=", {
+    type: typer(["strnum", "strnum"], "bool"),
+    binary: 50,
+    pairwise: "&&"
+  })
+
+  op("in", {
+    type: typer(["str", "object"], "bool"),
+    binary: 50,
+    args: 2,
+    name: " in "
+  })
+
+  op("instanceof", {
+    type: typer(["object", "function"], "bool"),
+    binary: 50,
+    args: 2,
+    name: " instanceof "
+  })
+
+  op("==", {
+    type: typer(["any", "any"], "bool"),
+    binary: 45,
+    pairwise: "&&"
+  })
+
+  op("!=", {
+    type: typer(["any", "any"], "bool"),
+    binary: 45,
+    pairwise: "&&"
+  })
+
+  op("===", {
+    type: typer(["any", "any"], "bool"),
+    binary: 45,
+    pairwise: "&&"
+  })
+
+  op("!==", {
+    type: typer(["any", "any"], "bool"),
+    binary: 45,
+    pairwise: "&&"
+  })
+
+  op("&", {
+    type: typer(["int", "int"], "int"),
+    binary: 40,
+    args: 2
+  })
+
+  op("^", {
+    type: typer(["int", "int"], "int"),
+    binary: 35,
+    args: 2
+  })
+
+  op("|", {
+    type: typer(["int", "int"], "int"),
+    binary: 30,
+    args: 2
+  })
+
+  op("&&", {
+    type: typer(["bool", "bool"], "bool"),
+    binary: 25
+  })
+
+  op("||", {
+    type: typer(["bool", "bool"], "bool"),
+    binary: 20
+  })
+
+  op("=", {
+    // TODO
+    type: function (x) {
+      x = x.args[1]
+      return x.type(x)
+    },
+    binary: 10,
+    args: 2,
+    order: "right",
+    isImpure: true,
+    expression: function (x) {
+      var a = []
+        , l = []
+        , r = []
+      destructure(a, x.args[0], expression(x.args[1]))
+      a.forEach(function (x) {
+        if (n.unwrap(x).op === "var") {
+          l.push(x)
+        } else {
+          r.push(x)
+        }
+      })
+      return n.opArray(",", l.concat(r))
+    }
+  })
+
   op("*=",         { binary: 10, args: 2, order: "right", isImpure: true })
   op("/=",         { binary: 10, args: 2, order: "right", isImpure: true })
   op("%=",         { binary: 10, args: 2, order: "right", isImpure: true })
@@ -1225,17 +1702,34 @@ var NINO = (function (n) {
     }
   })
 
+  n.makeOp("...", {
+    expression: function (x) {
+      argumentError(x, 1, 1)
+      throw n.error(x, "invalid use of ...")
+    }
+  })
+
   n.makeOp("empty", {
+    type: typer([], "void"),
     statement: function (x) {
       argumentError(x, 0, 0)
     },
     expression: function (x) {
       argumentError(x, 0, 0)
-      return n.op("void", n.op("number", "0"))
+      return n.op("void", n.literal(0))
     }
   })
 
   n.makeOp(";", {
+    // TODO
+    type: function (x) {
+      if (x.args.length) {
+        x = x.args[x.args.length - 1]
+        return n.type("function", [], x.type(x))
+      } else {
+        return n.type("void")
+      }
+    },
     compile: function (x) {
       //argumentError(x, 1)
       var r   = []
@@ -1266,15 +1760,16 @@ var NINO = (function (n) {
       } else {
         var len = x.args.length - 1
           , r   = []
-        x.args.forEach(function anon(x, i) {
-          if (n.unwrap(x).op === ",") {
+        x.args.forEach(function anon(w, i) {
+          var x = n.unwrap(w)
+          if (x.op === ",") {
             x.args.forEach(anon)
           } else {
-            var y = expression(x)
+            var y = expression(w)
             if (i !== len) {
               useless(y)
             }
-            if (i === len || n.unwrap(x).op !== "empty") {
+            if (i === len || x.op !== "empty") {
               r.push(y)
             }
           }
@@ -1308,8 +1803,9 @@ var NINO = (function (n) {
           var y
           if ((y = jsProp(x.args[1]))) {
             x = n.unwrap(x.args[0])
-                                     // TODO not sure how efficient this is...
-            if (x.op === "number" && Math.round(x.args[0]) === x.args[0]) {
+                                      // TODO not sure how efficient this is...
+                                      // TODO does this work correctly for non-number literals?
+            if (x.op === "literal" && Math.round(x.args[0]) === x.args[0]) {
               x = compile(x) + "."
             } else {
               x = compile(x)
@@ -1340,18 +1836,24 @@ var NINO = (function (n) {
           return true
         }
       })*/
-      x.args = x.args.map(function (w) {
+      var r = []
+      x.args.forEach(function (w) {
         var x = n.unwrap(w)
         if (x.op === "=") {
-          x.args[0] = expression(x.args[0])
-          x.args[1] = expression(x.args[1])
-          return n.wrap(w, x)
+          //x.args[0] = expression(x.args[0]) // TODO
+          //x.args[1] = expression(x.args[1])
+          destructure(r, x.args[0], expression(x.args[1]))
+          //return n.wrap(w, x) // TODO
         } else {
-          return expression(w)
+          r.push(n.op("var", expression(w)))
         }
       })
+      r.forEach(function (x) {
+        statements.push(assignToVar(x)) // TODO
+      })
+      //x.args = r.map(assignToVar)
       //x.args = x.args.map(expression)
-      statements.push(x)
+      //statements.push(x)
     },
     expression: function (x) {
       var seen = []
@@ -1379,7 +1881,23 @@ var NINO = (function (n) {
 
       var last = n.unwrap(x.args[x.args.length - 1])
       if (last.op === "=") {
-        last = last.args[0]
+        last = n.unwrap(last.args[0])
+      }
+
+      while (true) {
+        if (last.op === "array") {
+          last = n.unwrap(last.args[last.args.length - 1])
+          if (last.op === "...") {
+            last = n.unwrap(last.args[0])
+          }
+        } else if (last.op === "object") {
+          last = n.unwrap(last.args[last.args.length - 1])
+          if (last.op === "=") {
+            last = n.unwrap(last.args[1])
+          }
+        } else {
+          break
+        }
       }
 
       statement(x)
@@ -1460,7 +1978,7 @@ var NINO = (function (n) {
         return expression(x.args[0])
       case 2:
         if (isStatement(x.args[1])) {
-          var u = n.op("unique")
+          var u = n.unique()
           x.args[1] = n.op("=", u, x.args[1])
           statement(n.op("var", u))
           statement(x)
@@ -1470,7 +1988,7 @@ var NINO = (function (n) {
         }
       case 3:
         if (isStatement(x.args[1]) || isStatement(x.args[2])) {
-          var u = n.op("unique")
+          var u = n.unique()
           x.args[1] = n.op("=", u, x.args[1])
           x.args[2] = n.op("=", u, x.args[2])
           statement(n.op("var", u))
@@ -1545,8 +2063,17 @@ var NINO = (function (n) {
     },
     expression: function (x) {
       argumentError(x, 1)
-      x.args = x.args.map(expression)
-      return x
+      var first = expression(x.args[0])
+      return makeConcat(x.args.slice(1), function (r, seen) {
+        if (seen) {
+          x.args = [n.op(".", first, n.literal("apply")),
+                    n.literal(null),
+                    r]
+        } else {
+          x.args = [first].concat(r)
+        }
+        return x
+      })
     },
     compile: function (x) {
       return withPriority(80, function () {
@@ -1584,8 +2111,14 @@ var NINO = (function (n) {
   n.makeOp("array", {
     expression: function (x) {
       argumentError(x, 0)
-      x.args = x.args.map(expression)
-      return x
+      return makeConcat(x.args, function (r, seen) {
+        if (seen) {
+          return r
+        } else {
+          x.args = r
+          return x
+        }
+      })
     },
     compile: function (x) {
       // TODO don't hardcode 6
@@ -1606,11 +2139,17 @@ var NINO = (function (n) {
       return resetPriority(6, function () {
         var r = []
         withIndent(indent + 1, function () {
-          for (var i = 0, iLen = x.args.length - 1; i < iLen; i += 2) {
-            r.push(n.minify("\n") + n.space() +
-                   (jsProp(x.args[i]) || compile(x.args[i])) + ":" + n.minify(" ") +
-                   compile(x.args[i + 1]))
-          }
+          x.args.forEach(function (w) {
+            var x = n.unwrap(w)
+            if (x.op === "=") {
+              r.push(n.minify("\n") + n.space() +
+                     (jsProp(x.args[0]) || compile(x.args[0])) + ":" + n.minify(" ") +
+                     compile(x.args[1]))
+            } else {
+              r.push(n.minify("\n") + n.space() +
+                     (jsProp(x) || compile(x)) + ":" + n.minify(" ") + compile(x))
+            }
+          })
         })
         if (r.length) {
           return "{" + r.join(",") + n.minify("\n") + n.space() + "}"
@@ -1636,7 +2175,7 @@ var NINO = (function (n) {
     expression: function (x) {
       pushExpressions(x, isImpure)
       statement(x)
-      return expression(n.op("void", n.op("number", 0)))
+      return expression(n.op("void", n.literal(0)))
     },
     compile: function (x) {
       return compileLoop(x, "while", compile(x.args[0]), x.args[1])
@@ -1671,7 +2210,7 @@ var NINO = (function (n) {
     expression: function (x) {
       pushExpressions(x, isImpure)
       statement(x)
-      return expression(n.op("void", n.op("number", 0)))
+      return expression(n.op("void", n.literal(0)))
     },
     compile: function (x) {
       var r = []
@@ -1724,7 +2263,7 @@ var NINO = (function (n) {
     expression: function (x) {
       pushExpressions(x, isImpure)
       statement(x)
-      return expression(n.op("void", n.op("number", 0)))
+      return expression(n.op("void", n.literal(0)))
     },
     compile: function (x) {
       return compileLoop(x, "for", compile(x.args[0]) + " in " + compile(x.args[1]), x.args[2])
@@ -1735,15 +2274,11 @@ var NINO = (function (n) {
     isFunction: true,
     expression: function (x) {
       argumentError(x, 1, 2)
-      var args = n.unwrap(x.args[0])
-      args.args = args.args.map(expression)
-      if (x.args.length > 1) {
-        x.args[1] = functionStatement(x.args[1])
-      }
+      expressionFn(x, 0, 1)
       return x
     },
     compile: function (x) {
-      return compileFunction(x.scope, "", x.args[0], x.args[1])
+      return compileFunction("", x.args[0], x.args[1])
     }
   })
 
@@ -1754,12 +2289,8 @@ var NINO = (function (n) {
     isStatement: true,
     statement: function (x) {
       argumentError(x, 2, 3)
-      var args = n.unwrap(x.args[1])
       x.args[0] = expression(x.args[0])
-      args.args = args.args.map(expression)
-      if (x.args.length > 2) {
-        x.args[2] = functionStatement(x.args[2])
-      }
+      expressionFn(x, 1, 2)
       statements.push(x)
     },
     expression: function (x) {
@@ -1768,7 +2299,7 @@ var NINO = (function (n) {
       return expression(x.args[0])
     },
     compile: function (x) {
-      return compileFunction(x.scope, compile(x.args[0]), x.args[1], x.args[2])
+      return compileFunction(compile(x.args[0]), x.args[1], x.args[2])
     }
   })
 
@@ -1798,7 +2329,7 @@ var NINO = (function (n) {
     expression: function (x) {
       pushExpressions(x, isImpure)
 
-      var u = n.op("unique")
+      var u = n.unique()
 
       x.args = x.args.map(function (w, i) {
         var x = n.unwrap(w)
@@ -1859,7 +2390,7 @@ var NINO = (function (n) {
       statements.push(x)
     },
     expression: function (x) {
-      var u = n.op("unique")
+      var u = n.unique()
 
       x.args = x.args.map(function (x, i) {
         if (i !== 0) {
@@ -1917,5 +2448,4 @@ var NINO = (function (n) {
     }
   })*/
 
-  return n
-})(NINO || {})
+}));

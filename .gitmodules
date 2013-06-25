@@ -1,0 +1,3 @@
+[submodule "lib/esprima"]
+	path = lib/esprima
+	url = git://github.com/ariya/esprima.git

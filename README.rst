@@ -1,27 +1,65 @@
-How to use
+To install
 ==========
 
-First, you must create a Nino AST by calling the ``NINO.op``, ``NINO.opArray``, or ``NINO.fromJSON`` functions::
+::
+
+  git clone --recursive git://github.com/Pauan/nino.git nino
+
+If you're using a browser::
+
+  <script src="lib/esprima/esprima.js"></script>
+  <script src="nino.js"></script>
+
+If you're using AMD ``define``::
+
+  define(["nino"], function (NINO) {
+    ...
+  })
+
+If you're using CommonJS (including Node.js)::
+
+  var NINO = require("nino")
+
+Usage
+=====
+
+First, you must generate a Nino AST using any of the following functions::
 
   var code = NINO.op("+", ...)
   var code = NINO.opArray("+", [...])
   var code = NINO.fromJSON(["+", ...])
+  var code = NINO.parse("...")
 
-To see which operators are defined, search for ``n.makeOp`` in the file ``compile.js``. They generally follow JavaScript names and semantics.
+In addition, you can use ``NINO.fromAST`` and ``NINO.toAST`` to convert from/to the `SpiderMonkey AST <https://developer.mozilla.org/en-US/docs/SpiderMonkey/Parser_API>`_::
 
-Now that you have an AST, you need to pass it to the ``NINO.traverse`` function [#traverse]_ along with a scope, which is simply an object that says which global variables are defined::
+  var code = NINO.fromAST({ ... })
+  NINO.toAST(code)
+
+Now that you have a Nino AST, call either ``NINO.expression`` or ``NINO.statement``::
+
+  code = NINO.expression(code)
+  code = NINO.statement(code)
+
+REPLs will generally want to use ``NINO.expression`` because they return a value. On the other hand, if you're putting the string into a file which will be loaded later, you should use ``NINO.statement``.
+
+Now, you **must** call ``NINO.traverse`` on **all** of the files you want to compile::
 
   var scope = { foo: true, bar: true }
-  var ast   = NINO.traverse(code, scope)
+  code = NINO.traverse(code, scope)
 
-In the above example, Nino will treat the variables ``foo`` and ``bar`` as being defined, so that they won't collide with any uniques [#uniques]_.
+In the above example, Nino will treat the variables ``foo`` and ``bar`` as being defined. You must **first** call ``NINO.traverse`` on **all** the files, so that uniques [#uniques]_ do not collide with normal variables.
+
+Now you must call ``NINO.replace`` to replace the uniques with variables::
+
+  code = NINO.replace(code, scope)
 
 Lastly, you call ``NINO.compile`` which returns a string::
 
-  NINO.compile(ast, scope, "expression")
-  NINO.compile(ast, scope, "statement")
+  NINO.compile(code)
 
-The third argument to ``NINO.compile`` determines whether the top level is treated as an expression or a statement. REPLs will generally want to use ``"expression"`` because they return a value. On the other hand, if you're putting the string into a file which will be loaded later, you should use ``"statement"``.
+Nino also has a small utility to generate an HTML string::
+
+  NINO.html("foo", ["bar.js", "qux.js"])
 
 In addition, there are some optional properties::
 
@@ -35,7 +73,7 @@ In addition, there are some optional properties::
 
 * ``NINO.warnings`` controls whether to display warning messages or not.
 
-* ``NINO.builtins`` is an object that contains all the builtin JavaScript variables. It can be used as the second argument to ``NINO.traverse`` and ``NINO.compile``.
+* ``NINO.builtins`` is an object that contains all the builtin JavaScript variables. It can be used as the second argument to ``NINO.traverse`` and ``NINO.replace``.
 
 * ``NINO.mangle`` controls variable mangling. JavaScript variables can only contain certain characters, so if you have a variable which contains illegal characters, you have to mangle it to make it legal. The default behavior is as follows::
 
@@ -49,27 +87,87 @@ In addition, there are some optional properties::
 Why use it?
 ===========
 
-If you're designing a language that compiles to JavaScript, you have to deal with some annoying problems:
+* You can use ``NINO.parse`` and ``NINO.compile`` to create minified code: no need for a separate minifier. Parsing is courtesy of Esprima.
 
-* Distinction between statements and expressions
+* In addition to a ``variable`` datatype, Nino also has a ``unique`` datatype. The only difference is that a ``unique`` is guaranteed to never collide with any other variable [#uniques]_. If you've used Lisps, a ``unique`` is exactly the same as a gensym.
 
-* Operator precedence
+* `Destructuring assignments <http://wiki.ecmascript.org/doku.php?id=harmony:destructuring>`_ are supported::
 
-* Left/right associativity
+    NINO.parse("var [a, b] = [1, 2]")
 
-* Funky variable behavior (var hoisting, among other things)
+    var c = [1, 2]
+      , a = c[0]
+      , b = c[1]
 
-Instead, let Nino handle all of that. Some cool features that Nino has:
+  ::
 
-* Generates *very* short and *very* fast JavaScript.
+    NINO.parse("(function ([a, ...b]) { return b })")
 
-* With a single line of code you can choose whether to output a normal or minified string: no need for a separate minifier.
+    (function (c) {
+      var a = c[0]
+        , b = [].slice.call(c, 1)
+      return b
+    })
 
-* You can also use ``parse.js`` to parse JavaScript code into a Nino AST. Then you can run it through the Nino compiler to produce fast and short minified JavaScript.
+  ::
 
-* In addition to a ``"variable"`` datatype, Nino also has a ``"unique"`` datatype. The only difference is that a ``"unique"`` is guaranteed to never collide with any other variable [#uniques]_. If you've used Lisps, a ``"unique"`` is exactly the same as a gensym.
+    NINO.parse("var { a } = { a: 1 }")
 
-* The Nino AST is generally fairly simple and intelligent. It has some conveniences:
+    var b = { a: 1 }
+      , a = b.a
+
+  ::
+
+    NINO.parse("(function (...a, b) { return a })")
+
+    (function () {
+      var c = arguments
+        , a = [].slice.call(c, 0, -1)
+        , b = c[c.length - 1]
+      return a
+    })
+
+  As you can see, it even supports ``...`` in the middle of the argument list, rather than only at the end. This is something even ECMAScript Harmony does not do.
+
+* The `spread <http://wiki.ecmascript.org/doku.php?id=harmony:spread>`_ ``...`` operator is mostly supported::
+
+    NINO.parse("[1, ...a, 2, 3]")
+
+    [1].concat(a, [2], [3])
+
+  ::
+
+    NINO.parse("foo(1, ...bar, 2)")
+
+    foo.apply(null, [1].concat(bar, [2]))
+
+  But it doesn't work with the ``"new"`` operator. In addition, because it always uses ``null``, the value of ``this`` will be broken.
+
+* `Object shorthand <http://wiki.ecmascript.org/doku.php?id=strawman:object_initialiser_shorthand>`_::
+
+    NINO.parse("{ x, y }")
+
+    ({ x: x, y: y })
+
+* The ``NINO.op``, ``NINO.opArray``, and ``NINO.fromJSON`` functions have some conveniences:
+
+  * ``+``, ``-``, ``*``, ``/``, ``&&``, and ``||`` support 1 or more arguments::
+
+      NINO.fromJSON(["+", 1, 2, 3, 4, 5])
+
+      1 + 2 + 3 + 4 + 5
+
+  * ``++`` and ``--`` support either 1 or 2 arguments::
+
+      NINO.fromJSON(["++", NINO.variable("foo")])
+
+      ++foo
+
+    ::
+
+      NINO.fromJSON(["++", NINO.variable("foo"), 2])
+
+      foo += 2
 
   * ``"if"`` supports 1 to 3 arguments::
 
@@ -101,92 +199,91 @@ Instead, let Nino handle all of that. Some cool features that Nino has:
 
       1 == 2 && 2 == 3 && 3 == 4 && 4 == 5
 
-  * *All* statements can be used in expression position::
-
-      NINO.fromJSON(["+", ["call", 1, 2], ["throw", 3]])
-
-      1(2);
-      throw 3;
-      void 0 + void 0
-
     ::
 
-      NINO.fromJSON(["+", ["call", 1, 2], ["debugger"]])
+      NINO.fromJSON(["==", 1, ["call", NINO.variable("foo"), 2], ["call", NINO.variable("bar"), 3], 4, 5])
 
-      var a = 1(2);
-      debugger;
-      a + void 0
+      var a = foo(2)
+        , b = bar(3)
+      1 == a && a == b && b == 4 && 4 == 5
 
-    ::
+* *All* statements can be used in expression position::
 
-      NINO.fromJSON(["+", ["call", 1, 2], ["try", 3, ["finally", 4]]])
+    NINO.fromJSON(["+", ["call", NINO.variable("foo"), 1],
+                        ["if", 1, ["throw", 2]]])
 
-      var a = 1(2),
-          b;
-      try {
-        b = 3
-      } finally {
-        4
-      }
-      a + b
+    var a = foo(1)
+      , b
+    if (1) {
+      throw 2
+      b = void 0
+    }
+    a + b
 
-    ::
+  ::
 
-      NINO.fromJSON(["+", ["call", 1, 2], ["while", 3, 4]])
+    NINO.fromJSON(["+", ["call", NINO.variable("foo"), 1],
+                        ["throw", 2]])
 
-      var a = 1(2);
-      while (3)
-        4;
-      a + void 0
+    foo(1);
+    throw 2;
+    void 0 + void 0
 
-    ::
+  ::
 
-      NINO.fromJSON(["+", ["call", 1, 2],
-                          ["var", ["=", ["variable", "a"], ["call", 3, 4]]]])
+    NINO.fromJSON(["+", ["call", NINO.variable("foo"), 1]
+                        ["debugger"]])
 
-      var b = 1(2),
-          a = 3(4);
-      b + a
+    var a = foo(1);
+    debugger;
+    a + void 0
 
-  * Can generate helpful warnings, e.g. about useless expressions::
+  ::
 
-      NINO.fromJSON(["function", [","],
-                      [",", ["return", 1], 2]])
+    NINO.fromJSON(["+", ["call", NINO.variable("foo"), 1],
+                        ["try", 2, ["finally", 3]]])
 
-      warning: useless expression: 2
-      (function () {
-        return 1;
-        2
-      })
+    var a = foo(1),
+        b;
+    try {
+      b = 2
+    } finally {
+      3
+    }
+    a + b
 
-  * All JavaScript operators and statements are supported *except* for the following:
+  ::
 
-    * `block <https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Statements/block>`_
-    * `do...while <https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Statements/do...while>`_
-    * `label <https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Statements/label>`_
-    * `switch <https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Statements/switch>`_
-    * `with <https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Statements/with>`_
+    NINO.fromJSON(["+", ["call", NINO.variable("foo"), 1],
+                        ["while", 2, 3]])
 
-    * `const <https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Statements/const>`_
-    * `export <https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Statements/export>`_
-    * `for each...in <https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Statements/for_each...in>`_
-    * `for...of <https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Statements/for...of>`_
-    * `import <https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Statements/import>`_
-    * `let <https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Statements/let>`_
-    * `yield <https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Operators/yield>`_
+    var a = foo(1);
+    while (2)
+      3;
+    a + void 0
 
-.. [#traverse]
-   Why can't you just call ``NINO.compile`` directly?
+  ::
 
-   Let's suppose you wanted to compile multiple files using the Nino compiler. If you naively compiled each file separately, then it wouldn't work, because Nino needs to know about *all* the variables that are defined.
+    NINO.fromJSON(["+", ["call", NINO.variable("foo"), 1],
+                        ["var", ["=", NINO.variable("a"), ["call", NINO.variable("bar"), 2]]]])
 
-   So instead, you first call ``NINO.traverse`` on all of the files, and then afterwards you call ``NINO.compile``.
+    var b = foo(1),
+        a = bar(2);
+    b + a
 
 .. [#uniques]
    There are two important caveats regarding uniques. Nino prevents uniques from colliding with other variables by *renaming the uniques*. This means that as long as Nino is aware of *all* the variables that are defined, then everything will work correctly.
 
    But let's suppose you wrote some code which is compiled with the Nino compiler. In addition, you load a third-party JavaScript library which Nino does not know about. In this case, it is entirely possible that uniques could collide with variables defined by the third-party library.
 
-   The answer to this is to use the second argument to ``NINO.traverse`` and ``NINO.compile`` to let Nino know about the variables defined in the third-party library. This only applies to *global uniques*: local uniques (defined inside of a function) are *always* guaranteed to *never* collide.
+   There are two ways to solve this:
+
+   1. You can use ``NINO.parse`` followed by ``NINO.traverse`` on the JavaScript file. You don't need to compile it, only traverse it. This is the recommended approach.
+
+   2. You can manually add the global variables to the second argument to ``NINO.traverse`` and ``NINO.replace``. This runs the risk that you may miss some variables.
+
+   This only applies to *global uniques*: local uniques (defined inside of a function) are *always* guaranteed to *never* collide.
 
    Secondly, Nino provides a way to *completely bypass* the compiler and *insert arbitrary JavaScript code*. *Any* variables defined in this way could potentially collide with uniques.
+
+   In practice, however, as long as you properly call ``NINO.traverse`` on all the JavaScript files, uniques should not collide.
