@@ -11,18 +11,27 @@
       NINO.minified = false
       NINO.warnings = false
 
+      function compile(x) {
+        var scope = Object.create(NINO.builtins)
+        try {
+          x = NINO.expression(x)
+          x = NINO.traverse(x, scope)
+          x = NINO.replace(x, scope)
+          console.log(NINO.compile(x))
+        } catch (e) {
+          console.error(e.message)
+        }
+      }
+
       function expr(a) {
         a.forEach(function (x) {
-          var scope = Object.create(NINO.builtins)
-          try {
-            x = NINO.fromJSON(x)
-            x = NINO.expression(x)
-            x = NINO.traverse(x, scope)
-            x = NINO.replace(x, scope)
-            console.log(NINO.compile(x))
-          } catch (e) {
-            console.error(e.message)
-          }
+          compile(NINO.fromJSON(x))
+        })
+      }
+
+      function parse(a) {
+        a.forEach(function (x) {
+          compile(NINO.parse(x))
         })
       }
 
@@ -292,6 +301,7 @@
         ["for", 1, 2],
         ["for", 1, 2, 3],
         ["for", 1, 2, 3, 4],
+        ["for", ["empty"], ["empty"], ["empty"], 4],
 
         ["for", 1, 2, 3, [",", 4, 5, 6]],
 
@@ -679,9 +689,16 @@
         ["+", ["+", 1, 2], ["+", 3, 4]],
         ["+", ["+", ["+", 1], ["+", 2]]],
         ["-", ["+", 1, ["+", 2]]],
+
+        ["function", [","], ["this"]],
+        ["function", [","], NINO.variable("this")],
+
+        ["call", 1, 2, ["empty"], 3],
       ])
 
       parse([
+        "var a = 5",
+        "var a = function (x) { return 1 + (2 + 3) }; a(20)",
         "var [a, b] = [1, 2]",
         "(function ([a, ...b]) { return b })",
         "var { a } = { a: 1 }",
@@ -689,7 +706,6 @@
         "[1, ...a, 2, 3]",
         "foo(1, ...bar, 2)",
         "{ x, y }",
-
       ])
 
       /*expr(["switch", 1,

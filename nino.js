@@ -19,7 +19,7 @@
     if (typeof root.NINO === "undefined") {
       root.NINO = {}
     }
-    factory(root.esprima, root.escodegen, root.esmangle, root.NINO)
+    factory(root.NINO, root.esprima, root.escodegen, root.esmangle)
   }
 }(this, function (n, esprima, escodegen, esmangle) {
   "use strict"
@@ -62,8 +62,176 @@
     return n.opArray(s, [].slice.call(arguments, 1))
   }
 
-  // TODO
-  n.fromAST = function (x) {
+  // https://developer.mozilla.org/en-US/docs/SpiderMonkey/Parser_API
+  // TODO clone or whatever
+  n.fromAST = function anon(x) {
+    switch (x.type) {
+    case "LabeledStatement":
+    case "WithStatement":
+    case "SwitchStatement":
+    case "DoWhileStatement":
+    case "ForOfStatement":
+    case "LetStatement":
+    case "ArrowExpression":
+    case "LetExpression":
+    case "SwitchCase":
+      throw new Error("not supported: " + x.type)
+    case "Program":
+    case "BlockStatement":
+      return n.opArray(",", x.body.map(anon))
+    case "EmptyStatement":
+      return n.op(",")
+    case "ExpressionStatement":
+      return anon(x.expression)
+    case "IfStatement":
+      var a = [anon(x.test), anon(x.consequent)]
+      if (x.alternate !== null) {
+        a.push(anon(x.alternate))
+      }
+      return n.opArray("if", a)
+    case "BreakStatement":
+      if (x.label !== null) {
+        throw new Error("not supported: break [label]")
+      }
+      return n.op("break")
+    case "ContinueStatement":
+      if (x.label !== null) {
+        throw new Error("not supported: continue [label]")
+      }
+      return n.op("continue")
+    case "ReturnStatement":
+      return n.opArray("return", (x.argument === null ? [] : [anon(x.argument)]))
+    case "ThrowStatement":
+      return n.op("throw", anon(x.argument))
+    case "TryStatement":
+      var a = [anon(x.block)]
+      if (x.handler !== null) {
+        if (x.handler.type !== "CatchClause") {
+          throw new Error("not supported: " + x.handler.type)
+        }
+        if (x.handler.guard !== null) {
+          throw new Error("not supported")
+        }
+        a.push(n.op("catch", anon(x.handler.param), anon(x.handler.body)))
+      }
+      if (x.finalizer !== null) {
+        a.push(n.op("finally", anon(x.finalizer)))
+      }
+      if (x.guardedHandlers.length) {
+        throw new Error("not supported")
+      }
+      return n.opArray("try", a)
+    case "WhileStatement":
+      return n.op("while", anon(x.test), anon(x.body))
+    case "ForStatement":
+      return n.op("for", (x.init === null ? n.op("empty") : anon(x.init)),
+                         (x.test === null ? n.op("empty") : anon(x.test)),
+                         (x.update === null ? n.op("empty") : anon(x.update)),
+                         anon(x.body))
+    case "ForInStatement":
+      if (x.each) {
+        throw new Error("not supported")
+      }
+      return n.op("for-in", anon(x.left), anon(x.right), anon(x.body))
+    case "DebuggerStatement":
+      return n.op("debugger")
+    case "FunctionDeclaration":
+    case "FunctionExpression":
+      var a = x.params.map(anon)
+      if (x.rest !== null) {
+        a.push(n.op("...", anon(x.rest)))
+      }
+      if (x.defaults.length || x.generator || x.expression) {
+        throw new Error("not supported")
+      }
+      if (x.type === "FunctionDeclaration") {
+        return n.op("function-var", anon(x.id), n.opArray(",", a), anon(x.body))
+      } else {
+        if (x.id !== null) {
+          throw new Error("not supported: (function " + x.id + "() { ... })")
+        }
+        return n.op("function", n.opArray(",", a), anon(x.body))
+      }
+    case "VariableDeclaration":
+      if (x.kind !== "var") {
+        throw new Error("not supported: " + x.kind)
+      }
+      var a = x.declarations.map(function (x) {
+        if (x.type !== "VariableDeclarator") {
+          throw new Error("not supported: " + x.type)
+        }
+        if (x.init === null) {
+          return anon(x.id)
+        } else {
+          return n.op("=", anon(x.id), anon(x.init))
+        }
+      })
+      return n.opArray("var", a)
+    case "ThisExpression":
+      return n.op("this")
+    case "ArrayExpression":
+    case "ArrayPattern":
+      var a = x.elements.map(function (x) {
+        if (x === null) {
+          return n.op("empty")
+        } else {
+          return anon(x)
+        }
+      })
+      return n.opArray("array", a)
+    case "ObjectExpression":
+      var a = x.properties.map(function (x) {
+        if (x.kind !== "init") {
+          throw new Error("not supported: " + x.kind)
+        }
+        return n.op("=", anon(x.key), anon(x.value))
+      })
+      return n.opArray("object", a)
+    case "ObjectPattern":
+      var a = x.properties.map(function (x) {
+        return n.op("=", anon(x.key), anon(x.value))
+      })
+      return n.opArray("object", a)
+    case "SequenceExpression":
+      return n.opArray(",", x.expressions.map(anon))
+    case "UnaryExpression":
+    case "UpdateExpression":
+      if (!x.prefix) {
+        throw new Error("not supported")
+      }
+      return n.op(x.operator, anon(x.argument))
+    case "BinaryExpression":
+    case "AssignmentExpression":
+    case "LogicalExpression":
+      if (x.operator === "+=") {
+        return n.op("++", anon(x.left), anon(x.right))
+      } else if (x.operator === "-=") {
+        return n.op("--", anon(x.left), anon(x.right))
+      } else {
+        return n.op(x.operator, anon(x.left), anon(x.right))
+      }
+    case "ConditionalExpression":
+      return n.op("if", anon(x.test), anon(x.alternate), anon(x.consequent))
+    case "NewExpression":
+    case "CallExpression":
+      var a = [anon(x.callee)]
+      x.arguments.forEach(function (x) {
+        if (x === null) {
+          // TODO
+          throw new Error("not supported")
+          //return n.op("empty")
+        } else {
+          return anon(x)
+        }
+      })
+      return n.opArray((x.type === "NewExpression" ? "new" : "call"), a)
+    case "MemberExpression":
+      return n.op(".", anon(x.object), anon(x.property))
+    case "Identifier":
+      return n.variable(x.name)
+    case "Literal":
+      return n.literal(x.value)
+    }
   }
 
   n.toAST = function (x) {
@@ -77,6 +245,10 @@
     } else {
       return x
     }
+  }
+
+  n.parse = function (s) {
+    return n.fromAST(esprima.parse(s))
   }
 
   function makeLiteral(s, min, max, info) {
@@ -1107,20 +1279,23 @@
     statements  = []
     expressions = []
     try {
-      var x = n.unwrap(w)
       if (type === "statement") {
-        statement(x)
+        statement(w)
       } else if (type === "expression") {
-        ;(function (w) {
-          var x = n.unwrap(w)
-          if (x.op === ",") {
-            x.args.forEach(function (x) {
-              statements.push(x)
+        var x = n.unwrap(w)
+        if (x.op === ",") {
+          ;(function (len) {
+            x.args.forEach(function (x, i) {
+              if (i === len) {
+                statements.push(expression(x))
+              } else {
+                statement(x)
+              }
             })
-          } else {
-            statements.push(w)
-          }
-        })(expression(x))
+          })(x.args.length - 1)
+        } else {
+          statements.push(expression(w))
+        }
       }
       var a = []
         , r = []
@@ -1725,6 +1900,16 @@
     }
   })
 
+  n.makeOp("this", {
+    expression: function (x) {
+      argumentError(x, 0, 0)
+      return x
+    },
+    compile: function (x) {
+      return "this"
+    }
+  })
+
   n.makeOp("empty", {
     type: typer([], "void"),
     statement: function (x) {
@@ -2147,7 +2332,15 @@
   n.makeOp("object", {
     expression: function (x) {
       argumentError(x, 0)
-      x.args = x.args.map(expression)
+      x.args = x.args.map(function (x) {
+        if (n.unwrap(x).op === "=") {
+          x.args[0] = expression(x.args[0])
+          x.args[1] = expression(x.args[1])
+          return x
+        } else {
+          return expression(x)
+        }
+      })
       return x
     },
     compile: function (x) {
@@ -2207,19 +2400,25 @@
         var first = n.unwrap(x.args[0])
         if (first.op === "var") {
           x.args[0] = n.wrap(x.args[0], blockStatement(first))
-        } else {
+        } else if (first.op !== "empty") {
           spliceBlock(x, 0)
           x.args[0] = expression(x.args[0])
         }
       }
       if (x.args.length > 1) {
-        x.args[1] = expression(x.args[1])
+        if (n.unwrap(x.args[1]).op !== "empty") {
+          x.args[1] = expression(x.args[1])
+        }
       }
       if (x.args.length > 2) {
-        x.args[2] = expression(x.args[2])
+        if (n.unwrap(x.args[2]).op !== "empty") {
+          x.args[2] = expression(x.args[2])
+        }
       }
       if (x.args.length > 3) {
-        x.args[3] = blockStatement(x.args[3])
+        if (n.unwrap(x.args[3]).op !== "empty") {
+          x.args[3] = blockStatement(x.args[3])
+        }
       }
       statements.push(x)
     },
@@ -2235,13 +2434,19 @@
         if (first.op === "var") {
           first.isInline = true
         }
-        r.push(compile(first) + ";")
+        if (first.op !== "empty") {
+          r.push(compile(first) + ";")
+        }
       }
       if (x.args.length > 1) {
-        r.push(compile(x.args[1]) + ";")
+        if (n.unwrap(x.args[1]).op !== "empty") {
+          r.push(compile(x.args[1]) + ";")
+        }
       }
       if (x.args.length > 2) {
-        r.push(compile(x.args[2]) + ";")
+        if (n.unwrap(x.args[2]).op !== "empty") {
+          r.push(compile(x.args[2]) + ";")
+        }
       }
       while (r.length < 3) {
         r.push(";")

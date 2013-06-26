@@ -87,8 +87,6 @@ In addition, there are some optional properties::
 Why use it?
 ===========
 
-* You can use ``NINO.parse`` and ``NINO.compile`` to create minified code: no need for a separate minifier. Parsing is courtesy of Esprima.
-
 * In addition to a ``variable`` datatype, Nino also has a ``unique`` datatype. The only difference is that a ``unique`` is guaranteed to never collide with any other variable [#uniques]_. If you've used Lisps, a ``unique`` is exactly the same as a gensym.
 
 * `Destructuring assignments <http://wiki.ecmascript.org/doku.php?id=harmony:destructuring>`_ are supported::
