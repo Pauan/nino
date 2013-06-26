@@ -4,22 +4,24 @@
   // Universal Module Definition (UMD) to support AMD, CommonJS/Node.js,
   // and plain browser loading,
   if (typeof define === "function" && define.amd) {
-    define(["./lib/esprima/esprima",
-            null, //"./lib/escodegen/escodegen",
-            null, //"./lib/esmangle/esmangle",
-            "exports"], factory)
+    define(["exports",
+            "./lib/esprima/esprima"//,
+            //"./lib/escodegen/escodegen",
+            //"./lib/esmangle/esmangle"
+            ], factory)
   } else if (typeof require !== "undefined" && typeof exports !== "undefined") {
-    factory(require("./lib/esprima/esprima"),
-            null, //require("./lib/escodegen/escodegen"),
-            null, //require("./lib/esmangle/esmangle"),
-            exports)
+    factory(exports,
+            require("./lib/esprima/esprima")//,
+            //require("./lib/escodegen/escodegen"),
+            //require("./lib/esmangle/esmangle")
+            )
   } else {
     if (typeof root.NINO === "undefined") {
       root.NINO = {}
     }
     factory(root.esprima, root.escodegen, root.esmangle, root.NINO)
   }
-}(this, function (esprima, escodegen, esmangle, n) {
+}(this, function (n, esprima, escodegen, esmangle) {
   "use strict"
 
   n.error = function (x, s) {
