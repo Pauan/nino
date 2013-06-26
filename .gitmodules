@@ -1,3 +1,6 @@
 [submodule "lib/esprima"]
 	path = lib/esprima
 	url = git://github.com/ariya/esprima.git
+[submodule "lib/requirejs"]
+	path = lib/requirejs
+	url = git://github.com/jrburke/requirejs.git
