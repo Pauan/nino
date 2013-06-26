@@ -35,12 +35,17 @@ In addition, you can use ``NINO.fromAST`` and ``NINO.toAST`` to convert from/to 
   var code = NINO.fromAST({ ... })
   NINO.toAST(code)
 
-Now that you have a Nino AST, call either ``NINO.expression`` or ``NINO.statement``::
+Now that you have a Nino AST, call ``NINO.expression``, ``NINO.statement``, or ``NINO.module``::
 
   code = NINO.expression(code)
   code = NINO.statement(code)
+  code = NINO.module(code, NINO.variable("foo"))
 
-REPLs will generally want to use ``NINO.expression`` because they return a value. On the other hand, if you're putting the string into a file which will be loaded later, you should use ``NINO.statement``.
+REPLs will generally want to use ``NINO.expression`` because they return a value.
+
+On the other hand, if you're putting the string into a file which will be loaded later, you can use ``NINO.statement``.
+
+However, it is recommended to use ``NINO.module`` which will wrap the code in a `UMD <https://github.com/umdjs/umd>`_ so that it will work with AMD ``define``, CommonJS/Node.js ``require``, and ordinary browsers. The second argument is only used in browsers and determines the global variable that will be used for the module.
 
 Now, you **must** call ``NINO.traverse`` on **all** of the files you want to compile::
 
@@ -88,6 +93,30 @@ Why use it?
 ===========
 
 * In addition to a ``variable`` datatype, Nino also has a ``unique`` datatype. The only difference is that a ``unique`` is guaranteed to never collide with any other variable [#uniques]_. If you've used Lisps, a ``unique`` is exactly the same as a gensym.
+
+* Includes a Node.js script that can
+
+* ECMAScript Harmony `modules <http://wiki.ecmascript.org/doku.php?id=harmony:modules>`_ are supported::
+
+    NINO.fromJSON([",", ["import", ["object", NINO.variable("foo")], "./lib/foo"],
+                        ["export", ["var", ["=", NINO.variable("bar"), ...]]]])
+
+    (function (a, b) {
+      "use strict";
+      if (typeof define === "function" && define.amd) {
+        define(["exports", "./lib/foo"], b)
+      } else if (typeof require !== "undefined" && typeof exports !== "undefined") {
+        b(exports, require("./lib/foo"))
+      } else {
+        if (typeof root.bar === "undefined") {
+          root.bar = {}
+        }
+        factory(root.bar, root.foo)
+      }
+    }(this, function (a, b) {
+      "use strict";
+      a.bar = ...
+    }))
 
 * `Destructuring assignments <http://wiki.ecmascript.org/doku.php?id=harmony:destructuring>`_ are supported::
 

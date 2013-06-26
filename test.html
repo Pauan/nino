@@ -694,7 +694,20 @@
         ["function", [","], NINO.variable("this")],
 
         ["call", 1, 2, ["empty"], 3],
+
+        ["function", [",", NINO.variable("foo"), NINO.variable("bar")],
+          NINO.variable("foo")]
       ])
+
+      ;(function () {
+        var scope = {}
+          , x = NINO.fromJSON([",", 1, 2, 3, ["+", [".", NINO.variable("foo"), "bar"], 4]])
+        x = NINO.module([NINO.variable("foo"), "./lib/test"], NINO.variable("exports"), x)
+        x = NINO.traverse(x, scope)
+        x = NINO.replace(x, scope)
+        x = NINO.compile(x)
+        console.log(x)
+      })()
 
       parse([
         "var a = 5",
