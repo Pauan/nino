@@ -1,744 +1,747 @@
 <!DOCTYPE html>
 <html>
   <body>
-    <script src="lib/esprima/esprima.js"></script>
-    <script src="nino.js"></script>
+    <script src="require.js"></script>
     <script>
-      var a = NINO.unique("a")
-        , b = NINO.unique("b")
-        , c = NINO.unique("c")
+      require(["nino"], function (nino) {
+        "use strict"
 
-      NINO.minified = false
-      NINO.warnings = false
+        var a = nino.unique("a")
+          , b = nino.unique("b")
+          , c = nino.unique("c")
 
-      function compile(x) {
-        var scope = Object.create(NINO.builtins)
-        try {
-          x = NINO.expression(x)
-          x = NINO.traverse(x, scope)
-          x = NINO.replace(x, scope)
-          console.log(NINO.compile(x))
-        } catch (e) {
-          console.error(e.message)
+        nino.minified = false
+        nino.warnings = false
+
+        function compile(x) {
+          var scope = Object.create(nino.builtins)
+          try {
+            x = nino.expression(x)
+            x = nino.traverse(x, scope)
+            x = nino.replace(x, scope)
+            console.log(nino.compile(x))
+          } catch (e) {
+            console.error(e.message)
+          }
         }
-      }
 
-      function expr(a) {
-        a.forEach(function (x) {
-          compile(NINO.fromJSON(x))
-        })
-      }
+        function expr(a) {
+          a.forEach(function (x) {
+            compile(nino.fromJSON(x))
+          })
+        }
 
-      function parse(a) {
-        a.forEach(function (x) {
-          compile(NINO.parse(x))
-        })
-      }
+        function parse(a) {
+          a.forEach(function (x) {
+            compile(nino.parse(x))
+          })
+        }
 
-      var ret = ["function", [",", c],
-                  [",", ["+", a, b, c],
-                        ["return", ["+", a, b, c]]]]
+        var ret = ["function", [",", c],
+                    [",", ["+", a, b, c],
+                          ["return", ["+", a, b, c]]]]
 
-      expr([
-        "foo\\\"\n\t\b\v\f\r",
+        expr([
+          "foo\\\"\n\t\b\v\f\r",
 
-        ["&&", 1, 2, 3, 4],
+          ["&&", 1, 2, 3, 4],
 
-        ["===", 1, 2, 3],
+          ["===", 1, 2, 3],
 
-        ["===", 1, ["call", 2, 3], 4],
+          ["===", 1, ["call", 2, 3], 4],
 
-        ["===", ["call", 1, 2], 2, 3],
+          ["===", ["call", 1, 2], 2, 3],
 
-        ["===", ["call", 1, 2], ["call", 2, 3], 3],
+          ["===", ["call", 1, 2], ["call", 2, 3], 3],
 
-        ["===", ["call", 1, 2], ["call", 2, 3], ["call", 3, 4]],
+          ["===", ["call", 1, 2], ["call", 2, 3], ["call", 3, 4]],
 
-        ["===", ["call", 1, 2], ["call", 2, 3], ["call", 3, 4], ["call", 4, 5]],
+          ["===", ["call", 1, 2], ["call", 2, 3], ["call", 3, 4], ["call", 4, 5]],
 
-        ["<", 1, 2, 3],
+          ["<", 1, 2, 3],
 
-        ["<", ["call", 1, 2], 2, 3],
+          ["<", ["call", 1, 2], 2, 3],
 
-        ["<", ["call", 1, 2], ["call", 2, 3], 3],
+          ["<", ["call", 1, 2], ["call", 2, 3], 3],
 
-        ["<", ["call", 1, 2], ["call", 2, 3], ["call", 3, 4]],
+          ["<", ["call", 1, 2], ["call", 2, 3], ["call", 3, 4]],
 
-        ["<", ["call", 1, 2], ["call", 2, 3], ["call", 3, 4], ["call", 4, 5]],
+          ["<", ["call", 1, 2], ["call", 2, 3], ["call", 3, 4], ["call", 4, 5]],
 
-        [",", ["+", 1, 2],
-              ["function", [",", a, b],
-                [",", ["return", ret]]]],
+          [",", ["+", 1, 2],
+                ["function", [",", a, b],
+                  [",", ["return", ret]]]],
 
-        [",", ["function", [",", a, b],
-                [",", ["return", ret]]]],
+          [",", ["function", [",", a, b],
+                  [",", ["return", ret]]]],
 
-        ["+", 1, 2, 3, 4, 5],
+          ["+", 1, 2, 3, 4, 5],
 
-        ["+", 1, ["*", 2, 3]],
+          ["+", 1, ["*", 2, 3]],
 
-        ["*", 1, ["+", 2, 3]],
+          ["*", 1, ["+", 2, 3]],
 
-        ["+", ["-", 2, 3], 1],
+          ["+", ["-", 2, 3], 1],
 
-        ["+", 1, ["-", 2, 3]],
+          ["+", 1, ["-", 2, 3]],
 
-        ["=", a, ["=", b, 1]],
+          ["=", a, ["=", b, 1]],
 
-        ["=", ["=", b, 1], a],
+          ["=", ["=", b, 1], a],
 
-        ["+", ["=", a, 1], 2],
+          ["+", ["=", a, 1], 2],
 
-        ["typeof", ["function", [","],
-                     ["+", ["=", a, 1], 2]]],
+          ["typeof", ["function", [","],
+                       ["+", ["=", a, 1], 2]]],
 
-        ["+", ["+", 1]],
+          ["+", ["+", 1]],
 
-        ["-", ["-", 1]],
+          ["-", ["-", 1]],
 
-        ["+", ["!", 1]],
+          ["+", ["!", 1]],
 
-        ["+", ["-", 1]],
+          ["+", ["-", 1]],
 
-        ["!", ["!", 1]],
+          ["!", ["!", 1]],
 
-        ["typeof", ["typeof", 1]],
+          ["typeof", ["typeof", 1]],
 
-        [","],
+          [","],
 
-        [",", 1],
+          [",", 1],
 
 
-        ["<", 1, ["if", 2, 3, 4]],
+          ["<", 1, ["if", 2, 3, 4]],
 
-        ["if"],
+          ["if"],
 
-        ["if", 1],
+          ["if", 1],
 
-        ["if", 1, 2],
+          ["if", 1, 2],
 
-        ["if", 1, [",", 2, 3]],
+          ["if", 1, [",", 2, 3]],
 
-        ["if", 1, 2, 3],
+          ["if", 1, 2, 3],
 
-        ["if", 1, 2, 3, 4],
+          ["if", 1, 2, 3, 4],
 
-        ["if", 1, 2, 3, 4, 5],
+          ["if", 1, 2, 3, 4, 5],
 
-        ["if", 1, 2, 3, 4, 5, 6],
+          ["if", 1, 2, 3, 4, 5, 6],
 
-        ["if", 1, ["function", [","], 2], ["function", [","], 3]],
+          ["if", 1, ["function", [","], 2], ["function", [","], 3]],
 
-        ["if", 1, 2.5, [",", 3, 3.5]],
+          ["if", 1, 2.5, [",", 3, 3.5]],
 
-        ["if", 1, [",", 2, 5, 2.5], 3.5],
+          ["if", 1, [",", 2, 5, 2.5], 3.5],
 
-        ["if", 1, [",", 2, 5, 2.5], [",", 3, 3.5]],
+          ["if", 1, [",", 2, 5, 2.5], [",", 3, 3.5]],
 
-        ["if", ["+", a, 1], 2, 3],
+          ["if", ["+", a, 1], 2, 3],
 
-        ["if", ["=", a, 1], 2, 3],
+          ["if", ["=", a, 1], 2, 3],
 
 
-        [",", ["if", 1, 2, 3], 4],
+          [",", ["if", 1, 2, 3], 4],
 
-        [",", ["if", 1, [",", 2, 3], 5], 4],
+          [",", ["if", 1, [",", 2, 3], 5], 4],
 
-        [",", ["if", 1, 3, [",", 4, 5]], 4],
+          [",", ["if", 1, 3, [",", 4, 5]], 4],
 
-        [",", ["if", 1, [",", 2, 3]], 4],
+          [",", ["if", 1, [",", 2, 3]], 4],
 
-        [",", ["if", 1, [",", 2, 3], [",", 4, 5]], 4],
+          [",", ["if", 1, [",", 2, 3], [",", 4, 5]], 4],
 
 
-        ["+", 1, ["if", 1, 2]],
+          ["+", 1, ["if", 1, 2]],
 
-        ["||", 1, ["if", 1, 2]],
+          ["||", 1, ["if", 1, 2]],
 
-        ["+", ["if", 1, 2, 3], 4],
+          ["+", ["if", 1, 2, 3], 4],
 
-        ["+", 4, ["if", 1, 2, 3]],
+          ["+", 4, ["if", 1, 2, 3]],
 
-        ["function", [","],
-          ["if", 1, 2, 3]],
+          ["function", [","],
+            ["if", 1, 2, 3]],
 
-        ["function", [","],
-          ["if", ["var", ["=", a, 1]], ["var", ["=", b, 2]], ["var", ["=", c, 3]]]],
+          ["function", [","],
+            ["if", ["var", ["=", a, 1]], ["var", ["=", b, 2]], ["var", ["=", c, 3]]]],
 
-        [",", ["var", ["=", a, 1]], ["var", ["=", b, 2]]],
+          [",", ["var", ["=", a, 1]], ["var", ["=", b, 2]]],
 
 
-        ["while", 1, 2],
+          ["while", 1, 2],
 
-        ["while", 1, ["var", ["=", a, ["break", 1]]]],
+          ["while", 1, ["var", ["=", a, ["break", 1]]]],
 
-        ["while", 1, ["var", ["=", a, 2]]],
+          ["while", 1, ["var", ["=", a, 2]]],
 
 
-        [",", ["function", [","], 1]],
+          [",", ["function", [","], 1]],
 
-        ["function", [","],
-          ["+", 1, ["return", 2]]],
+          ["function", [","],
+            ["+", 1, ["return", 2]]],
 
-        ["function", [","],
-          ["+", ["call", 1, 2], ["call", 2, 3], ["return", 2], ["call", 3, 4]]],
+          ["function", [","],
+            ["+", ["call", 1, 2], ["call", 2, 3], ["return", 2], ["call", 3, 4]]],
 
-        ["function", [","],
-          ["function", [","], 3]],
+          ["function", [","],
+            ["function", [","], 3]],
 
-        ["++", ["++", 1]],
+          ["++", ["++", 1]],
 
-        ["call", ["+", 1, 2], ["+", 2, 3]],
+          ["call", ["+", 1, 2], ["+", 2, 3]],
 
-        ["call", ["function", [","], 1], 2],
+          ["call", ["function", [","], 1], 2],
 
-        ["+", 1, ["var", a]],
+          ["+", 1, ["var", a]],
 
-        [",", ["var", ["=", a, 1]], 2],
+          [",", ["var", ["=", a, 1]], 2],
 
-        ["+", 1, ["var", ["=", a, 2]]],
+          ["+", 1, ["var", ["=", a, 2]]],
 
-        ["+", 1, ["var", ["=", a, 2], ["=", b, 3]]],
+          ["+", 1, ["var", ["=", a, 2], ["=", b, 3]]],
 
-        ["+", 1, ["var", ["=", a, [",", ["var", b], 2, 3]]]],
+          ["+", 1, ["var", ["=", a, [",", ["var", b], 2, 3]]]],
 
-        [",", ["call", 3, 4], ["debugger"], ["call", 1, 2]],
+          [",", ["call", 3, 4], ["debugger"], ["call", 1, 2]],
 
-        [",", ["call", 3, 4], ["throw"], ["call", 1, 2]],
+          [",", ["call", 3, 4], ["throw"], ["call", 1, 2]],
 
-        [",", ["+", 0, ["=", a, 1]], ["=", b, 2], 3, 4, 5],
+          [",", ["+", 0, ["=", a, 1]], ["=", b, 2], 3, 4, 5],
 
-        ["+", 1, ["var", ["=", a, 2], ["=", b, 3], c]],
+          ["+", 1, ["var", ["=", a, 2], ["=", b, 3], c]],
 
-        ["function", [","],
-          ["=", [",", 1, 2, 3], [",", 4, 5, 6]]],
+          ["function", [","],
+            ["=", [",", 1, 2, 3], [",", 4, 5, 6]]],
 
-        ["function", [","],
-          ["+", [",", 1, 2, 3], [",", 4, 5, 6]]],
+          ["function", [","],
+            ["+", [",", 1, 2, 3], [",", 4, 5, 6]]],
 
-        ["function", [","],
-          ["+", [",", 1, 2, 3]]],
+          ["function", [","],
+            ["+", [",", 1, 2, 3]]],
 
 
-        ["var", ["=", c, 5],
-                ["=", a, 10],
-                ["=", a, ["function", [","], ["return", 3]]],
-                ["=", c, 5],
-                ["=", b, ["function", [","], ["return", 4]]]],
-
-        ["var", ["=", c, ["call", 5, 10]],
-                ["=", a, ["delete", 10]],
-                ["=", a, ["function", [","], ["return", 3]]],
-                ["=", c, ["+", 5, 20]],
-                ["=", b, ["function", [","], ["return", 4]]]],
-
-        ["var", ["=", a, 5],
-                ["=", a, 10],
-                ["=", a, ["function", [","], ["return", 3]]],
-                ["=", b, 5],
-                ["=", b, ["function", [","], ["return", 4]]]],
-
-        ["function", [","],
           ["var", ["=", c, 5],
                   ["=", a, 10],
                   ["=", a, ["function", [","], ["return", 3]]],
                   ["=", c, 5],
-                  ["=", b, ["function", [","], ["return", 4]]]]],
+                  ["=", b, ["function", [","], ["return", 4]]]],
 
-        ["function", [","],
-          [",", a,
-                ["var", ["=", a, 10]]]],
+          ["var", ["=", c, ["call", 5, 10]],
+                  ["=", a, ["delete", 10]],
+                  ["=", a, ["function", [","], ["return", 3]]],
+                  ["=", c, ["+", 5, 20]],
+                  ["=", b, ["function", [","], ["return", 4]]]],
 
-        ["var", ["=", a, ["function", [","], ["return", NINO.unique("d")]]]],
+          ["var", ["=", a, 5],
+                  ["=", a, 10],
+                  ["=", a, ["function", [","], ["return", 3]]],
+                  ["=", b, 5],
+                  ["=", b, ["function", [","], ["return", 4]]]],
 
-        [",", ["var", a],
-              ["=", a, ["function", [","], ["return", NINO.unique("d")]]]],
+          ["function", [","],
+            ["var", ["=", c, 5],
+                    ["=", a, 10],
+                    ["=", a, ["function", [","], ["return", 3]]],
+                    ["=", c, 5],
+                    ["=", b, ["function", [","], ["return", 4]]]]],
 
-        ["function-var", a, [","], ["return", NINO.unique("d")]],
+          ["function", [","],
+            [",", a,
+                  ["var", ["=", a, 10]]]],
 
-        ["try", 1, ["catch", a, 2], ["finally", 3]],
+          ["var", ["=", a, ["function", [","], ["return", nino.unique("d")]]]],
 
-        ["try", 1, ["catch", a, [",", 2, 3]], ["finally", [",", 3, 4]]],
+          [",", ["var", a],
+                ["=", a, ["function", [","], ["return", nino.unique("d")]]]],
 
-        ["function", [","],
-          ["try", 1, ["catch", a, 2], ["finally", 3]]],
+          ["function-var", a, [","], ["return", nino.unique("d")]],
 
-        ["function", [","],
-          ["return", ["try", 1, ["catch", a, 2], ["finally", 3]]]],
+          ["try", 1, ["catch", a, 2], ["finally", 3]],
 
-        ["while", 1, ["=", a, ["break"]]],
+          ["try", 1, ["catch", a, [",", 2, 3]], ["finally", [",", 3, 4]]],
 
-        ["var", ["=", a, [",", 1, 2, 3]]],
+          ["function", [","],
+            ["try", 1, ["catch", a, 2], ["finally", 3]]],
 
-        ["var", b, c, ["=", a, [",", b, c, 1, 2, 3]], ["=", c, [",", 4, 5, 6]]],
+          ["function", [","],
+            ["return", ["try", 1, ["catch", a, 2], ["finally", 3]]]],
 
-        ["if", [",", 1, 2, 3], 4, 5],
+          ["while", 1, ["=", a, ["break"]]],
 
-        [".", a, b],
+          ["var", ["=", a, [",", 1, 2, 3]]],
 
-        [".", [",", a, b], c],
+          ["var", b, c, ["=", a, [",", b, c, 1, 2, 3]], ["=", c, [",", 4, 5, 6]]],
 
-        [".", a, "b"],
+          ["if", [",", 1, 2, 3], 4, 5],
 
-        [".", a, "b^test aha"],
+          [".", a, b],
 
-        [".", 1, "foo"],
+          [".", [",", a, b], c],
 
-        [".", 1.5, "foo"],
+          [".", a, "b"],
 
-        ["new", ["function", [","], 1], 2, 3, 4],
+          [".", a, "b^test aha"],
 
-        ["call", [",", a, b], 1, 2, 3],
+          [".", 1, "foo"],
 
-        ["new", [",", a, b], 1, 2, 3],
+          [".", 1.5, "foo"],
 
-        ["new", a, 1, 2, 3],
+          ["new", ["function", [","], 1], 2, 3, 4],
 
-        ["new", a, [",", 1, 2], 3],
+          ["call", [",", a, b], 1, 2, 3],
 
-        ["for"],
-        ["for", 1],
-        ["for", 1, 2],
-        ["for", 1, 2, 3],
-        ["for", 1, 2, 3, 4],
-        ["for", ["empty"], ["empty"], ["empty"], 4],
+          ["new", [",", a, b], 1, 2, 3],
 
-        ["for", 1, 2, 3, [",", 4, 5, 6]],
+          ["new", a, 1, 2, 3],
 
-        ["for", ["var", ["=", a, 1], ["=", b, 2]],
-                ["<", a, 10],
-                ["++", a],
-          [",", 4, 5, 6]],
+          ["new", a, [",", 1, 2], 3],
 
-        ["for", [",", ["var", ["=", a, 1]], ["=", b, 2]],
-                ["<", a, 10],
-                ["++", a],
-          [",", 4, 5, 6]],
+          ["for"],
+          ["for", 1],
+          ["for", 1, 2],
+          ["for", 1, 2, 3],
+          ["for", 1, 2, 3, 4],
+          ["for", ["empty"], ["empty"], ["empty"], 4],
 
-        [",", ["var", ["=", a, 1]], ["=", b, 2]],
+          ["for", 1, 2, 3, [",", 4, 5, 6]],
 
-        ["for-in", 1, 2, 3],
+          ["for", ["var", ["=", a, 1], ["=", b, 2]],
+                  ["<", a, 10],
+                  ["++", a],
+            [",", 4, 5, 6]],
 
-        ["for-in", ["var", ["=", a, 1]], 2, 3],
+          ["for", [",", ["var", ["=", a, 1]], ["=", b, 2]],
+                  ["<", a, 10],
+                  ["++", a],
+            [",", 4, 5, 6]],
 
-        ["for-in", ["var", a], 2],
-        ["for-in", ["var", a], 2, 3],
+          [",", ["var", ["=", a, 1]], ["=", b, 2]],
 
-        ["for-in", ["var", a], [",", 2, 3, 4], 5],
+          ["for-in", 1, 2, 3],
 
-        ["for-in", ["var", a], 2, [",", 3, 4, 5]],
+          ["for-in", ["var", ["=", a, 1]], 2, 3],
 
-        ["for-in", ["var", a, b], 2, 3],
+          ["for-in", ["var", a], 2],
+          ["for-in", ["var", a], 2, 3],
 
-        ["for-in", [",", ["=", b, 1], ["var", a]], 2, 3],
+          ["for-in", ["var", a], [",", 2, 3, 4], 5],
 
-        ["for-in", [",", ["=", b, 1], a], 2, 3],
+          ["for-in", ["var", a], 2, [",", 3, 4, 5]],
 
-        ["array", 1, 2, 3, 4, 5],
+          ["for-in", ["var", a, b], 2, 3],
 
-        ["array", 1, [",", 2, 3], 4, 5],
+          ["for-in", [",", ["=", b, 1], ["var", a]], 2, 3],
 
-        ["+", 3, ["object", ["=", "a", 1], ["=", "b", 2]]],
+          ["for-in", [",", ["=", b, 1], a], 2, 3],
 
-        ["+", ["object", ["=", "a", 1], ["=", "b", 2]], 3],
+          ["array", 1, 2, 3, 4, 5],
 
-        ["object", ["=", "a", 1], ["=", "b", 2]],
+          ["array", 1, [",", 2, 3], 4, 5],
 
-        ["object", ["=", "a", 1], ["=", "b", 2]],
+          ["+", 3, ["object", ["=", "a", 1], ["=", "b", 2]]],
 
-        ["object", ["=", "a", ["function", [","], 1]], ["=", "b", 2]],
+          ["+", ["object", ["=", "a", 1], ["=", "b", 2]], 3],
 
-        ["object", ["=", "a", [",", 1, 2]], ["=", "b", 3]],
+          ["object", ["=", "a", 1], ["=", "b", 2]],
 
-        ["object", ["=", "a", ["object", ["=", "b", 2]]], ["=", "c", 3]],
+          ["object", ["=", "a", 1], ["=", "b", 2]],
 
-        ["object", ["=", "a^test aha", 1], ["=", "b", 2]],
+          ["object", ["=", "a", ["function", [","], 1]], ["=", "b", 2]],
 
-        ["object", NINO.variable("a"), NINO.variable("b")],
+          ["object", ["=", "a", [",", 1, 2]], ["=", "b", 3]],
 
-        ["object", NINO.variable("var"), NINO.variable("b")],
+          ["object", ["=", "a", ["object", ["=", "b", 2]]], ["=", "c", 3]],
 
-        ["object", "var", "b", 1, 5],
+          ["object", ["=", "a^test aha", 1], ["=", "b", 2]],
 
-        ["+", a, b],
+          ["object", nino.variable("a"), nino.variable("b")],
 
-        ["+", NINO.variable("hiya"), NINO.variable("a")],
+          ["object", nino.variable("var"), nino.variable("b")],
 
-        ["+", NINO.unique("a"), NINO.unique("b")],
+          ["object", "var", "b", 1, 5],
 
-        (function () {
-          var a = NINO.unique("a")
-          return ["function", [",", a],
-                   ["+", a, NINO.variable("a")]]
-        })(),
+          ["+", a, b],
 
-        ["function", [",", NINO.variable("b")],
-          ["+", NINO.unique("b"), NINO.variable("b")]],
+          ["+", nino.variable("hiya"), nino.variable("a")],
 
-        ["function", [",", NINO.variable("a")],
-          ["return", ["function", [",", NINO.variable("b")],
-                       ["+", NINO.variable("a"), NINO.variable("b")]]]],
+          ["+", nino.unique("a"), nino.unique("b")],
 
-        ["function", [","],
-          [",", ["try", 1,
-                  ["catch", NINO.variable("TEST"),
-                    ["var", ["=", NINO.variable("yes"), 5]]]],
-                ["+", NINO.unique("yes"), NINO.unique("TEST")]]],
+          (function () {
+            var a = nino.unique("a")
+            return ["function", [",", a],
+                     ["+", a, nino.variable("a")]]
+          })(),
 
-        ["function", [","],
-          [",", ["try", 1,
-                  ["catch", NINO.variable("TEST"),
-                    NINO.unique("TEST")]],
-                NINO.unique("TEST")]],
+          ["function", [",", nino.variable("b")],
+            ["+", nino.unique("b"), nino.variable("b")]],
 
-        ["+", NINO.unique("b"), 1],
+          ["function", [",", nino.variable("a")],
+            ["return", ["function", [",", nino.variable("b")],
+                         ["+", nino.variable("a"), nino.variable("b")]]]],
 
-        ["function-var", NINO.variable("foo"), [","],
-          ["return", 1]],
+          ["function", [","],
+            [",", ["try", 1,
+                    ["catch", nino.variable("TEST"),
+                      ["var", ["=", nino.variable("yes"), 5]]]],
+                  ["+", nino.unique("yes"), nino.unique("TEST")]]],
 
-        ["+", NINO.unique("foo"), 1],
+          ["function", [","],
+            [",", ["try", 1,
+                    ["catch", nino.variable("TEST"),
+                      nino.unique("TEST")]],
+                  nino.unique("TEST")]],
 
-        NINO.variable("50fooBar-qux"),
-        NINO.variable("foo&bar"),
-        NINO.variable("foo_bar"),
-        NINO.variable("break"),
-        NINO.variable("NaN"),
-        NINO.variable("arguments"),
-        NINO.unique("arguments"),
-        NINO.variable("arguments2"),
-        NINO.variable("_"),
+          ["+", nino.unique("b"), 1],
 
-        [",", NINO.bypass("var YESNOTESTINGHAHAHA = 5"),
-              ["+", 5, 20]],
+          ["function-var", nino.variable("foo"), [","],
+            ["return", 1]],
 
-        ["+", 1, ["var", ["=", NINO.variable("a"), 2]]],
+          ["+", nino.unique("foo"), 1],
 
-        ["function", [","],
-          [",", ["return", 1], 2]],
+          nino.variable("50fooBar-qux"),
+          nino.variable("foo&bar"),
+          nino.variable("foo_bar"),
+          nino.variable("break"),
+          nino.variable("NaN"),
+          nino.variable("arguments"),
+          nino.unique("arguments"),
+          nino.variable("arguments2"),
+          nino.variable("_"),
 
-        ["function", [","],
-          ["return", ["if", 1, 2, 3]]],
+          [",", nino.bypass("var YESNOTESTINGHAHAHA = 5"),
+                ["+", 5, 20]],
 
-        ["function", [","],
-          ["return", ["if", ["return", 1], 2, 3]]],
+          ["+", 1, ["var", ["=", nino.variable("a"), 2]]],
 
-        ["function", [","],
-          ["return", ["if", 1, ["return", 2]]]],
+          ["function", [","],
+            [",", ["return", 1], 2]],
 
-        ["function", [","],
-          ["return", ["if", 1, ["return", 2], ["return", 3]]]],
+          ["function", [","],
+            ["return", ["if", 1, 2, 3]]],
 
-        ["function", [","],
-          ["return", ["if", 1, ["try", 2, ["finally", 3]], 4]]],
+          ["function", [","],
+            ["return", ["if", ["return", 1], 2, 3]]],
 
-        ["function", [","],
-          ["if", 1, 2]],
+          ["function", [","],
+            ["return", ["if", 1, ["return", 2]]]],
 
-        ["function", [","],
-          ["if", 1, 2, 3]],
+          ["function", [","],
+            ["return", ["if", 1, ["return", 2], ["return", 3]]]],
 
-        ["function", [","],
-          ["if", 1, ["throw", 2], ["throw", 3]]],
+          ["function", [","],
+            ["return", ["if", 1, ["try", 2, ["finally", 3]], 4]]],
 
-        ["function", [","],
-          ["if", 1, ["throw", 2]]],
+          ["function", [","],
+            ["if", 1, 2]],
 
-        ["function", [","],
-          ["if", 1, ["try", 2, ["finally", 3]], 4]],
+          ["function", [","],
+            ["if", 1, 2, 3]],
 
-        ["call", ["call", 1, 2], ["try", 3, ["finally", 4]], ["call", 5, 6]],
+          ["function", [","],
+            ["if", 1, ["throw", 2], ["throw", 3]]],
 
+          ["function", [","],
+            ["if", 1, ["throw", 2]]],
 
-        ["+", ["call", 1, 2], ["throw", 3]],
-        ["+", ["call", 1, 2], ["debugger"]],
-        ["+", ["call", 1, 2], ["try", 3, ["finally", 4]], ["throw", 3]],
-        ["+", ["call", 1, 2], ["try", 3, ["finally", 4]]],
-        ["+", ["call", 1, 2], ["while", 3, 4]],
-        ["+", ["call", 1, 2], ["var", ["=", NINO.variable("a"), ["call", 3, 4]]]],
+          ["function", [","],
+            ["if", 1, ["try", 2, ["finally", 3]], 4]],
 
-        ["+", ["call", 1, 2], ["var", ["=", NINO.variable("a"), ["function", [","], ["return", 3]]]]],
+          ["call", ["call", 1, 2], ["try", 3, ["finally", 4]], ["call", 5, 6]],
 
-        ["+", ["call", NINO.variable("a")],
-              ["var", ["=", NINO.variable("a"), 3]]],
 
-        ["+", ["+", ["call", NINO.variable("b")], 2],
-              ["var", ["=", NINO.variable("a"), ["call", 3, 4]]]],
+          ["+", ["call", 1, 2], ["throw", 3]],
+          ["+", ["call", 1, 2], ["debugger"]],
+          ["+", ["call", 1, 2], ["try", 3, ["finally", 4]], ["throw", 3]],
+          ["+", ["call", 1, 2], ["try", 3, ["finally", 4]]],
+          ["+", ["call", 1, 2], ["while", 3, 4]],
+          ["+", ["call", 1, 2], ["var", ["=", nino.variable("a"), ["call", 3, 4]]]],
 
-        ["+", NINO.variable("a"),
-              ["var", ["=", NINO.variable("a"), 3]]],
+          ["+", ["call", 1, 2], ["var", ["=", nino.variable("a"), ["function", [","], ["return", 3]]]]],
 
-        ["+", ["+", NINO.variable("a"), 2],
-              ["var", ["=", NINO.variable("a"), 3]]],
+          ["+", ["call", nino.variable("a")],
+                ["var", ["=", nino.variable("a"), 3]]],
 
-        ["+", NINO.variable("b"),
-              ["var", ["=", NINO.variable("a"), 3]]],
+          ["+", ["+", ["call", nino.variable("b")], 2],
+                ["var", ["=", nino.variable("a"), ["call", 3, 4]]]],
 
+          ["+", nino.variable("a"),
+                ["var", ["=", nino.variable("a"), 3]]],
 
-        ["=", a, ["=", b, ["=", c, 1]]],
-        ["=", a, b, c, 1],
+          ["+", ["+", nino.variable("a"), 2],
+                ["var", ["=", nino.variable("a"), 3]]],
 
-        NINO.lineComment("foobarquxcorge"),
-        NINO.blockComment("testing*/\ntesting\ntesting"),
-        NINO.docComment("testing*/\ntesting\ntesting"),
+          ["+", nino.variable("b"),
+                ["var", ["=", nino.variable("a"), 3]]],
 
-        [",", NINO.blockComment("testing*/\ntesting\ntesting"),
-              ["call", 1, 2]],
 
-        ["function", [","],
-          [",", NINO.blockComment("documentation goes here"),
-                NINO.lineComment("documentation goes here"),
-                ["return", 2]]],
+          ["=", a, ["=", b, ["=", c, 1]]],
+          ["=", a, b, c, 1],
 
-        [",", 1, 2, ["empty"], 3],
-        [",", 1, 2, ["empty"]],
-        ["+", 1, ["empty"]],
-        ["+", [",", 1, 2, ["empty"], 3]],
-        ["+", [",", 1, 2, ["empty"]]],
+          nino.lineComment("foobarquxcorge"),
+          nino.blockComment("testing*/\ntesting\ntesting"),
+          nino.docComment("testing*/\ntesting\ntesting"),
 
-        ["function", [","],
-          ["return"]],
+          [",", nino.blockComment("testing*/\ntesting\ntesting"),
+                ["call", 1, 2]],
 
-        ["function", [","],
-          ["return", ["empty"]]],
+          ["function", [","],
+            [",", nino.blockComment("documentation goes here"),
+                  nino.lineComment("documentation goes here"),
+                  ["return", 2]]],
 
-        ["function", [","],
-          ["return", ["void", 0]]],
+          [",", 1, 2, ["empty"], 3],
+          [",", 1, 2, ["empty"]],
+          ["+", 1, ["empty"]],
+          ["+", [",", 1, 2, ["empty"], 3]],
+          ["+", [",", 1, 2, ["empty"]]],
 
-        ["function", [","],
-          [",", 2,
-                ["return", ["void", 0]]]],
+          ["function", [","],
+            ["return"]],
 
-        ["function", [","],
-          [",", 2,
-                [",", 3,
-                      ["return", ["void", 0]]]]],
+          ["function", [","],
+            ["return", ["empty"]]],
 
-        ["function", [","],
-          [",", ["return", ["void", 0]],
-                2]],
+          ["function", [","],
+            ["return", ["void", 0]]],
 
-        ["function", [","],
-          ["return", ["void", ["=", a, 0]]]],
+          ["function", [","],
+            [",", 2,
+                  ["return", ["void", 0]]]],
 
-        ["function", [","],
-          ["throw", ["empty"]]],
+          ["function", [","],
+            [",", 2,
+                  [",", 3,
+                        ["return", ["void", 0]]]]],
 
-        ["function", [","],
-          ["return", ["if", 1]]],
+          ["function", [","],
+            [",", ["return", ["void", 0]],
+                  2]],
 
-        ["function", [","],
-          ["return", ["if", 1,
-                       ["var", ["=", a, 2]]]]],
+          ["function", [","],
+            ["return", ["void", ["=", a, 0]]]],
 
-        ["function", [","],
-          [",", ["return", ["if", 1,
-                             ["var", ["=", a, 2]]]],
-                3]],
+          ["function", [","],
+            ["throw", ["empty"]]],
 
-        ["function", [","],
-          ["return", ["if", 1,
-                       ["var", ["=", a, 2]],
-                       ["var", ["=", a, 3]]]]],
+          ["function", [","],
+            ["return", ["if", 1]]],
 
-        ["function", [","],
-          ["return", ["if", 1,
-                       ["var", ["=", a, 2]],
-                       3]]],
+          ["function", [","],
+            ["return", ["if", 1,
+                         ["var", ["=", a, 2]]]]],
 
-        ["function", [","],
-          ["return", ["if", 1,
-                       2,
-                       ["var", ["=", a, 3]]]]],
+          ["function", [","],
+            [",", ["return", ["if", 1,
+                               ["var", ["=", a, 2]]]],
+                  3]],
 
-        ["function", [","],
-          ["return", ["if", 1, 2, 3]]],
+          ["function", [","],
+            ["return", ["if", 1,
+                         ["var", ["=", a, 2]],
+                         ["var", ["=", a, 3]]]]],
 
-        ["function", [","],
-          ["return", ["try", 1,
-                       ["catch", a]]]],
+          ["function", [","],
+            ["return", ["if", 1,
+                         ["var", ["=", a, 2]],
+                         3]]],
 
-        ["function", [","],
-          [",", ["return", ["try", 1,
-                             ["catch", a]]],
-                2]],
+          ["function", [","],
+            ["return", ["if", 1,
+                         2,
+                         ["var", ["=", a, 3]]]]],
 
-        ["function", [","],
-          ["return", ["try", 1,
-                       ["catch", a, 2]]]],
+          ["function", [","],
+            ["return", ["if", 1, 2, 3]]],
 
-        ["function", [","],
-          ["return", ["try", 1,
-                       ["catch", a, 2],
-                       ["finally", 3]]]],
+          ["function", [","],
+            ["return", ["try", 1,
+                         ["catch", a]]]],
 
+          ["function", [","],
+            [",", ["return", ["try", 1,
+                               ["catch", a]]],
+                  2]],
 
-        ["try", 1, ["catch", a, 2], ["catch", b, 3]],
-        ["try", 1, ["finally", 2], ["catch", b, 3]],
-        ["try", 1, ["finally", 2], ["finally", 3]],
+          ["function", [","],
+            ["return", ["try", 1,
+                         ["catch", a, 2]]]],
 
-        ["call", 1, ["...", 2]],
-        ["call", 1, ["...", 2], 3],
-        ["call", 1, 2, ["...", 3]],
-        ["call", 1, 2, ["...", 3], 4],
+          ["function", [","],
+            ["return", ["try", 1,
+                         ["catch", a, 2],
+                         ["finally", 3]]]],
 
-        ["array", ["...", 2]],
-        ["array", ["...", 1], 2],
-        ["array", 1, ["...", 2]],
-        ["array", 1, ["...", 2], 3],
 
-        ["var", ["=", ["object", NINO.variable("a"), NINO.variable("b")],
-                      ["object"]]],
+          ["try", 1, ["catch", a, 2], ["catch", b, 3]],
+          ["try", 1, ["finally", 2], ["catch", b, 3]],
+          ["try", 1, ["finally", 2], ["finally", 3]],
 
-        ["var", ["=", ["object", "a", "b"],
-                      ["object"]]],
+          ["call", 1, ["...", 2]],
+          ["call", 1, ["...", 2], 3],
+          ["call", 1, 2, ["...", 3]],
+          ["call", 1, 2, ["...", 3], 4],
 
-        ["var", ["=", ["object", ["=", NINO.variable("a"), NINO.variable("b")],
-                                 ["=", "foo", NINO.variable("bar")],
-                                 ["=", "he^llo", ["array", NINO.variable("yes"), NINO.variable("no")]]],
-                      ["object"]]],
+          ["array", ["...", 2]],
+          ["array", ["...", 1], 2],
+          ["array", 1, ["...", 2]],
+          ["array", 1, ["...", 2], 3],
 
-        ["var", ["=", ["array", NINO.variable("a"), NINO.variable("b")],
-                      ["array", 1, 2]]],
+          ["var", ["=", ["object", nino.variable("a"), nino.variable("b")],
+                        ["object"]]],
 
-        ["var", ["=", ["array", NINO.variable("a"), ["empty"], NINO.variable("b")],
-                      ["array", 1, 2, 3]]],
+          ["var", ["=", ["object", "a", "b"],
+                        ["object"]]],
 
-        ["var", ["=", ["array", NINO.variable("a"), ["...", NINO.variable("b")]],
-                      ["array", 1, 2]]],
+          ["var", ["=", ["object", ["=", nino.variable("a"), nino.variable("b")],
+                                   ["=", "foo", nino.variable("bar")],
+                                   ["=", "he^llo", ["array", nino.variable("yes"), nino.variable("no")]]],
+                        ["object"]]],
 
-        ["var", ["=", ["array", NINO.variable("a"),
-                                ["...", NINO.variable("b")],
-                                NINO.variable("c")],
-                      ["array", 1, 2]]],
+          ["var", ["=", ["array", nino.variable("a"), nino.variable("b")],
+                        ["array", 1, 2]]],
 
-        ["var", ["=", ["array", NINO.variable("a"),
-                                ["...", NINO.variable("b")],
-                                NINO.variable("c"),
-                                NINO.variable("d")],
-                      ["array", 1, 2]]],
+          ["var", ["=", ["array", nino.variable("a"), ["empty"], nino.variable("b")],
+                        ["array", 1, 2, 3]]],
 
-        ["var", ["=", ["array", NINO.variable("a"),
-                                ["array", NINO.variable("b"), NINO.variable("c")]],
-                      ["array", 1, ["array", 2, 3]]]],
+          ["var", ["=", ["array", nino.variable("a"), ["...", nino.variable("b")]],
+                        ["array", 1, 2]]],
 
-        ["=", ["array", NINO.variable("a"), NINO.variable("b")],
-              ["array", 1, 2]],
+          ["var", ["=", ["array", nino.variable("a"),
+                                  ["...", nino.variable("b")],
+                                  nino.variable("c")],
+                        ["array", 1, 2]]],
 
-        ["=", ["array", ["array", NINO.variable("a")], NINO.variable("b")],
-              ["array", ["array", 1], 2]],
+          ["var", ["=", ["array", nino.variable("a"),
+                                  ["...", nino.variable("b")],
+                                  nino.variable("c"),
+                                  nino.variable("d")],
+                        ["array", 1, 2]]],
 
-        ["=", ["array", NINO.variable("a"), ["array", NINO.variable("b")]],
-              ["array", 1, ["array", 2]]],
+          ["var", ["=", ["array", nino.variable("a"),
+                                  ["array", nino.variable("b"), nino.variable("c")]],
+                        ["array", 1, ["array", 2, 3]]]],
 
-        ["function", [",", NINO.variable("a"), ["empty"], NINO.variable("b")]],
-        ["function", [",", NINO.variable("a"), ["empty"], ["...", NINO.variable("b")], ["empty"]]],
-        ["function", [",", NINO.variable("a"), ["...", NINO.variable("b")]]],
-        ["function", [",", NINO.variable("a"), ["...", NINO.variable("b")], NINO.variable("c")]],
-        ["function", [",", NINO.variable("a"), ["...", NINO.variable("b")], NINO.variable("c"), NINO.variable("d")]],
+          ["=", ["array", nino.variable("a"), nino.variable("b")],
+                ["array", 1, 2]],
 
-        ["function", [",", ["...", NINO.variable("a")]]],
+          ["=", ["array", ["array", nino.variable("a")], nino.variable("b")],
+                ["array", ["array", 1], 2]],
 
-        ["function", [",", ["array", NINO.variable("a"), NINO.variable("b")]]],
-        ["function", [",", ["array", NINO.variable("a"), NINO.variable("b")]], 1],
+          ["=", ["array", nino.variable("a"), ["array", nino.variable("b")]],
+                ["array", 1, ["array", 2]]],
 
-        ["function", [",", NINO.unique(), NINO.unique()],
-          ["function", [",", NINO.unique(), NINO.unique()], ["empty"]]],
+          ["function", [",", nino.variable("a"), ["empty"], nino.variable("b")]],
+          ["function", [",", nino.variable("a"), ["empty"], ["...", nino.variable("b")], ["empty"]]],
+          ["function", [",", nino.variable("a"), ["...", nino.variable("b")]]],
+          ["function", [",", nino.variable("a"), ["...", nino.variable("b")], nino.variable("c")]],
+          ["function", [",", nino.variable("a"), ["...", nino.variable("b")], nino.variable("c"), nino.variable("d")]],
 
-        (function () {
-          var b = NINO.unique()
-          return ["function", [",", NINO.unique(), b],
-                   ["function", [",", NINO.unique(), NINO.unique()], b]]
-        })(),
+          ["function", [",", ["...", nino.variable("a")]]],
 
-        (function () {
-          var b = NINO.unique()
-          return ["function", [",", NINO.unique(), b],
-                   ["function", [",", NINO.unique(), NINO.unique(), b], b]]
-        })(),
+          ["function", [",", ["array", nino.variable("a"), nino.variable("b")]]],
+          ["function", [",", ["array", nino.variable("a"), nino.variable("b")]], 1],
 
-        (function () {
-          var b = NINO.unique()
-          return ["function", [",", NINO.unique(), b],
-                   ["function", [",", NINO.unique(), NINO.unique(), b], ["empty"]]]
-        })(),
+          ["function", [",", nino.unique(), nino.unique()],
+            ["function", [",", nino.unique(), nino.unique()], ["empty"]]],
 
-        (function () {
-          var b = NINO.unique()
-          return ["function", [",", NINO.unique(), b],
-                   ["function", [",", NINO.unique(), NINO.unique()],
-                     [",", ["var", ["=", b, 1]],
-                           b]]]
-        })(),
+          (function () {
+            var b = nino.unique()
+            return ["function", [",", nino.unique(), b],
+                     ["function", [",", nino.unique(), nino.unique()], b]]
+          })(),
 
-        (function () {
-          var a = NINO.unique("arguments")
-          return a
-        })(),
+          (function () {
+            var b = nino.unique()
+            return ["function", [",", nino.unique(), b],
+                     ["function", [",", nino.unique(), nino.unique(), b], b]]
+          })(),
 
-        (function () {
-          var a = NINO.unique("arguments")
-          return [",", a,
-                       ["function", [","],
-                         a]]
-        })(),
+          (function () {
+            var b = nino.unique()
+            return ["function", [",", nino.unique(), b],
+                     ["function", [",", nino.unique(), nino.unique(), b], ["empty"]]]
+          })(),
 
-        ["+", ["-", 1]],
-        ["+", ["+", 1]],
-        ["+", 1, ["+", 2]],
-        ["+", ["+", 1], ["+", 2]],
-        ["+", ["+", 1, 2], ["+", 3, 4]],
-        ["+", ["+", ["+", 1], ["+", 2]]],
-        ["-", ["+", 1, ["+", 2]]],
+          (function () {
+            var b = nino.unique()
+            return ["function", [",", nino.unique(), b],
+                     ["function", [",", nino.unique(), nino.unique()],
+                       [",", ["var", ["=", b, 1]],
+                             b]]]
+          })(),
 
-        ["function", [","], ["this"]],
-        ["function", [","], NINO.variable("this")],
+          (function () {
+            var a = nino.unique("arguments")
+            return a
+          })(),
 
-        ["call", 1, 2, ["empty"], 3],
+          (function () {
+            var a = nino.unique("arguments")
+            return [",", a,
+                         ["function", [","],
+                           a]]
+          })(),
 
-        ["function", [",", NINO.variable("foo"), NINO.variable("bar")],
-          NINO.variable("foo")]
-      ])
+          ["+", ["-", 1]],
+          ["+", ["+", 1]],
+          ["+", 1, ["+", 2]],
+          ["+", ["+", 1], ["+", 2]],
+          ["+", ["+", 1, 2], ["+", 3, 4]],
+          ["+", ["+", ["+", 1], ["+", 2]]],
+          ["-", ["+", 1, ["+", 2]]],
 
-      ;(function () {
-        var scope = {}
-          , x = NINO.fromJSON([",", 1, 2, 3, ["+", [".", NINO.variable("foo"), "bar"], 4]])
-        x = NINO.module([NINO.variable("foo"), "./lib/test"], NINO.variable("exports"), x)
-        x = NINO.traverse(x, scope)
-        x = NINO.replace(x, scope)
-        x = NINO.compile(x)
-        console.log(x)
-      })()
+          ["function", [","], ["this"]],
+          ["function", [","], nino.variable("this")],
 
-      parse([
-        "var a = 5",
-        "var a = function (x) { return 1 + (2 + 3) }; a(20)",
-        "var [a, b] = [1, 2]",
-        "(function ([a, ...b]) { return b })",
-        "var { a } = { a: 1 }",
-        "(function (...a, b) { return a })",
-        "[1, ...a, 2, 3]",
-        "foo(1, ...bar, 2)",
-        "{ x, y }",
-      ])
+          ["call", 1, 2, ["empty"], 3],
 
-      /*expr(["switch", 1,
-             ["case", 0, 2],
-             ["fallthru", 0, 5],
-             ["case", 0, 3],
-             ["default", 4]])
+          ["function", [",", nino.variable("foo"), nino.variable("bar")],
+            nino.variable("foo")]
+        ])
 
-      expr(["switch", 1,
-             ["case", 0, [",", 2, 3]],
-             ["fallthru", 0, 5],
-             ["case", 0, [",", 3, 4]],
-             ["default", 4]])
+        /*;(function () {
+          var scope = {}
+            , x = nino.fromJSON([",", 1, 2, 3, ["+", [".", nino.variable("foo"), "bar"], 4]])
+          x = nino.module([nino.variable("foo"), "./lib/test"], nino.variable("exports"), x)
+          x = nino.traverse(x, scope)
+          x = nino.replace(x, scope)
+          x = nino.compile(x)
+          console.log(x)
+        })()*/
 
-      expr(["function", [","],
-             ["switch", 1,
+        parse([
+          "var a = 5",
+          "var a = function (x) { return 1 + (2 + 3) }; a(20)",
+          "var [a, b] = [1, 2]",
+          "(function ([a, ...b]) { return b })",
+          "var { a } = { a: 1 }",
+          "(function (...a, b) { return a })",
+          "[1, ...a, 2, 3]",
+          "foo(1, ...bar, 2)",
+          "{ x, y }",
+        ])
+
+        /*expr(["switch", 1,
+               ["case", 0, 2],
+               ["fallthru", 0, 5],
+               ["case", 0, 3],
+               ["default", 4]])
+
+        expr(["switch", 1,
                ["case", 0, [",", 2, 3]],
                ["fallthru", 0, 5],
                ["case", 0, [",", 3, 4]],
-               ["default", 4]]])*/
+               ["default", 4]])
+
+        expr(["function", [","],
+               ["switch", 1,
+                 ["case", 0, [",", 2, 3]],
+                 ["fallthru", 0, 5],
+                 ["case", 0, [",", 3, 4]],
+                 ["default", 4]]])*/
+      })
     </script>
   </body>
 </html>

@@ -1,4 +1,4 @@
-define(["esprima"], function (esprima) {
+define(["lib/esprima/esprima"], function (esprima) {
   "use strict"
 
   var n = {}
@@ -319,7 +319,7 @@ define(["esprima"], function (esprima) {
       x.id = ++uniqueIds
     },
     compile: function (x) {
-      throw n.error(x, "cannot compile unique, use NINO.replace")
+      throw n.error(x, "cannot compile unique, use nino.replace")
     }
   })
 
@@ -649,43 +649,6 @@ define(["esprima"], function (esprima) {
     return traverse(x)
   }
 
-  n.module = function (requires, exports, x) {
-    x = n.op("call", n.op("function", n.op(",", n.variable("a"), n.variable("b")),
-                       n.op(",", n.literal("use strict"),
-
-                                 )))
-    return n.statement(x)
-
-    (function (root, factory) {
-      "use strict"
-
-      // Universal Module Definition (UMD) to support AMD, CommonJS/Node.js,
-      // and plain browser loading,
-      if (typeof define === "function" && define.amd) {
-        define(["exports",
-                "./lib/esprima/esprima"//,
-                //"./lib/escodegen/escodegen",
-                //"./lib/esmangle/esmangle"
-                ], factory)
-      } else if (typeof require !== "undefined" && typeof exports !== "undefined") {
-        factory(exports,
-                require("./lib/esprima/esprima")//,
-                //require("./lib/escodegen/escodegen"),
-                //require("./lib/esmangle/esmangle")
-                )
-      } else {
-        if (typeof root.NINO === "undefined") {
-          root.NINO = {}
-        }
-        factory(root.NINO, root.esprima, root.escodegen, root.esmangle)
-      }
-    }(this, function (n, esprima, escodegen, esmangle) {
-      "use strict"
-
-      ...
-    }))
-  }
-
 
   var indent    = 0
     , priority  = 0
@@ -953,22 +916,22 @@ define(["esprima"], function (esprima) {
               y.args.length > 1 &&
               (isStatement(y.args[1]) ||
                (y.args.length > 2 && isStatement(y.args[2])))) {
-            y.args[1] = NINO.op(s, y.args[1])
+            y.args[1] = n.op(s, y.args[1])
             if (y.args.length > 2) {
-              y.args[2] = NINO.op(s, y.args[2])
+              y.args[2] = n.op(s, y.args[2])
             } else if (!b) {
-              y.args[2] = NINO.op(s)
+              y.args[2] = n.op(s)
             }
             statement(y)
             return
           } else if (y.op === "try") {
-            y.args[0] = NINO.op(s, y.args[0])
+            y.args[0] = n.op(s, y.args[0])
             y.args.slice(1).forEach(function (y, i) {
               if (y.op === "catch") {
                 if (y.args.length > 1) {
-                  y.args[1] = NINO.op(s, y.args[1])
+                  y.args[1] = n.op(s, y.args[1])
                 } else if (!b) {
-                  y.args[1] = NINO.op(s)
+                  y.args[1] = n.op(s)
                 }
               }
             })
