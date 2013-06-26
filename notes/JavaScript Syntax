@@ -28,16 +28,19 @@ assignment, and the following is illegal:
 
 ---
 
-You have to be very careful with + and -:
+You have to be very careful with + and - when generating minified code:
 
   + +1
   1 + +2
 
 If a + or - is followed by another + or - and they aren't a ++ or --
-operator, you must wrap in parens:
+operator, you must wrap in parens or add a space:
 
   +(+1)
-  1 + (+2)
+  1+(+2)
+
+  + +1
+  1+ +2
 
 ---
 
