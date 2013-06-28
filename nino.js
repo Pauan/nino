@@ -1,13 +1,22 @@
 define(["lib/esprima/esprima"], function (esprima) {
   "use strict"
 
-  var n = {}
-
-  n.error = function (x, s) {
-    return new Error(s + ": " + n.print(x))
+  var opt = {
+    minified: false,
+    warnings: true,
+    mangle: function (s) {
+      return s.replace(/[^$a-zA-Z0-9]/g, function (s, s1, s2) {
+        return s === "_" ? "__" : "_" + s.charCodeAt(0) + "_"
+      })
+    },
+    error: function (x, s) {
+      return new Error(s + ": " + print(x))
+    }
   }
 
-  n.getUnique = function (s, scope) {
+  var ops = {}
+
+  function getUnique(s, scope) {
     var s2 = s
       , i  = 2
     while (scope[s2]) {
@@ -17,33 +26,25 @@ define(["lib/esprima/esprima"], function (esprima) {
     return s2
   }
 
-  n.mangle = function (s) {
-    return s.replace(/[^$a-zA-Z0-9]/g, function (s, s1, s2) {
-      return s === "_" ? "__" : "_" + s.charCodeAt(0) + "_"
-    })
-  }
-
-  n.ops = {}
-
-  n.opArray = function (s) {
+  function opArray(s) {
     var args = [].slice.call(arguments, 1, -1)
     args = args.concat(arguments[arguments.length - 1])
 
-    if (n.ops[s] == null) {
+    if (ops[s] == null) {
       throw new Error("unknown operator: " + s)
     }
-    var o = Object.create(n.ops[s])
+    var o = Object.create(ops[s])
     o.args = args
     return o
   }
 
-  n.op = function (s) {
-    return n.opArray(s, [].slice.call(arguments, 1))
+  function op(s) {
+    return opArray(s, [].slice.call(arguments, 1))
   }
 
   // https://developer.mozilla.org/en-US/docs/SpiderMonkey/Parser_API
   // TODO clone or whatever
-  n.fromAST = function anon(x) {
+  function fromAST(x) {
     switch (x.type) {
     case "LabeledStatement":
     case "WithStatement":
@@ -57,33 +58,33 @@ define(["lib/esprima/esprima"], function (esprima) {
       throw new Error("not supported: " + x.type)
     case "Program":
     case "BlockStatement":
-      return n.opArray(",", x.body.map(anon))
+      return opArray(",", x.body.map(fromAST))
     case "EmptyStatement":
-      return n.op(",")
+      return op(",")
     case "ExpressionStatement":
-      return anon(x.expression)
+      return fromAST(x.expression)
     case "IfStatement":
-      var a = [anon(x.test), anon(x.consequent)]
+      var a = [fromAST(x.test), fromAST(x.consequent)]
       if (x.alternate !== null) {
-        a.push(anon(x.alternate))
+        a.push(fromAST(x.alternate))
       }
-      return n.opArray("if", a)
+      return opArray("if", a)
     case "BreakStatement":
       if (x.label !== null) {
         throw new Error("not supported: break [label]")
       }
-      return n.op("break")
+      return op("break")
     case "ContinueStatement":
       if (x.label !== null) {
         throw new Error("not supported: continue [label]")
       }
-      return n.op("continue")
+      return op("continue")
     case "ReturnStatement":
-      return n.opArray("return", (x.argument === null ? [] : [anon(x.argument)]))
+      return opArray("return", (x.argument === null ? [] : [fromAST(x.argument)]))
     case "ThrowStatement":
-      return n.op("throw", anon(x.argument))
+      return op("throw", fromAST(x.argument))
     case "TryStatement":
-      var a = [anon(x.block)]
+      var a = [fromAST(x.block)]
       if (x.handler !== null) {
         if (x.handler.type !== "CatchClause") {
           throw new Error("not supported: " + x.handler.type)
@@ -91,45 +92,45 @@ define(["lib/esprima/esprima"], function (esprima) {
         if (x.handler.guard !== null) {
           throw new Error("not supported")
         }
-        a.push(n.op("catch", anon(x.handler.param), anon(x.handler.body)))
+        a.push(op("catch", fromAST(x.handler.param), fromAST(x.handler.body)))
       }
       if (x.finalizer !== null) {
-        a.push(n.op("finally", anon(x.finalizer)))
+        a.push(op("finally", fromAST(x.finalizer)))
       }
       if (x.guardedHandlers.length) {
         throw new Error("not supported")
       }
-      return n.opArray("try", a)
+      return opArray("try", a)
     case "WhileStatement":
-      return n.op("while", anon(x.test), anon(x.body))
+      return op("while", fromAST(x.test), fromAST(x.body))
     case "ForStatement":
-      return n.op("for", (x.init === null ? n.op("empty") : anon(x.init)),
-                         (x.test === null ? n.op("empty") : anon(x.test)),
-                         (x.update === null ? n.op("empty") : anon(x.update)),
-                         anon(x.body))
+      return op("for", (x.init === null ? op("empty") : fromAST(x.init)),
+                       (x.test === null ? op("empty") : fromAST(x.test)),
+                       (x.update === null ? op("empty") : fromAST(x.update)),
+                       fromAST(x.body))
     case "ForInStatement":
       if (x.each) {
         throw new Error("not supported")
       }
-      return n.op("for-in", anon(x.left), anon(x.right), anon(x.body))
+      return op("for-in", fromAST(x.left), fromAST(x.right), fromAST(x.body))
     case "DebuggerStatement":
-      return n.op("debugger")
+      return op("debugger")
     case "FunctionDeclaration":
     case "FunctionExpression":
-      var a = x.params.map(anon)
+      var a = x.params.map(fromAST)
       if (x.rest !== null) {
-        a.push(n.op("...", anon(x.rest)))
+        a.push(op("...", fromAST(x.rest)))
       }
       if (x.defaults.length || x.generator || x.expression) {
         throw new Error("not supported")
       }
       if (x.type === "FunctionDeclaration") {
-        return n.op("function-var", anon(x.id), n.opArray(",", a), anon(x.body))
+        return op("function-var", fromAST(x.id), opArray(",", a), fromAST(x.body))
       } else {
         if (x.id !== null) {
           throw new Error("not supported: (function " + x.id + "() { ... })")
         }
-        return n.op("function", n.opArray(",", a), anon(x.body))
+        return op("function", opArray(",", a), fromAST(x.body))
       }
     case "VariableDeclaration":
       if (x.kind !== "var") {
@@ -140,94 +141,94 @@ define(["lib/esprima/esprima"], function (esprima) {
           throw new Error("not supported: " + x.type)
         }
         if (x.init === null) {
-          return anon(x.id)
+          return fromAST(x.id)
         } else {
-          return n.op("=", anon(x.id), anon(x.init))
+          return op("=", fromAST(x.id), fromAST(x.init))
         }
       })
-      return n.opArray("var", a)
+      return opArray("var", a)
     case "ThisExpression":
-      return n.op("this")
+      return op("this")
     case "ArrayExpression":
     case "ArrayPattern":
       var a = x.elements.map(function (x) {
         if (x === null) {
-          return n.op("empty")
+          return op("empty")
         } else {
-          return anon(x)
+          return fromAST(x)
         }
       })
-      return n.opArray("array", a)
+      return opArray("array", a)
     case "ObjectExpression":
       var a = x.properties.map(function (x) {
         if (x.kind !== "init") {
           throw new Error("not supported: " + x.kind)
         }
-        return n.op("=", anon(x.key), anon(x.value))
+        return op("=", fromAST(x.key), fromAST(x.value))
       })
-      return n.opArray("object", a)
+      return opArray("object", a)
     case "ObjectPattern":
       var a = x.properties.map(function (x) {
-        return n.op("=", anon(x.key), anon(x.value))
+        return op("=", fromAST(x.key), fromAST(x.value))
       })
-      return n.opArray("object", a)
+      return opArray("object", a)
     case "SequenceExpression":
-      return n.opArray(",", x.expressions.map(anon))
+      return opArray(",", x.expressions.map(fromAST))
     case "UnaryExpression":
     case "UpdateExpression":
       if (!x.prefix) {
         throw new Error("not supported")
       }
-      return n.op(x.operator, anon(x.argument))
+      return op(x.operator, fromAST(x.argument))
     case "BinaryExpression":
     case "AssignmentExpression":
     case "LogicalExpression":
       if (x.operator === "+=") {
-        return n.op("++", anon(x.left), anon(x.right))
+        return op("++", fromAST(x.left), fromAST(x.right))
       } else if (x.operator === "-=") {
-        return n.op("--", anon(x.left), anon(x.right))
+        return op("--", fromAST(x.left), fromAST(x.right))
       } else {
-        return n.op(x.operator, anon(x.left), anon(x.right))
+        return op(x.operator, fromAST(x.left), fromAST(x.right))
       }
     case "ConditionalExpression":
-      return n.op("if", anon(x.test), anon(x.alternate), anon(x.consequent))
+      return op("if", fromAST(x.test), fromAST(x.alternate), fromAST(x.consequent))
     case "NewExpression":
     case "CallExpression":
-      var a = [anon(x.callee)]
+      var a = [fromAST(x.callee)]
       x.arguments.forEach(function (x) {
         if (x === null) {
           // TODO
           throw new Error("not supported")
-          //return n.op("empty")
+          //return op("empty")
         } else {
-          return anon(x)
+          return fromAST(x)
         }
       })
-      return n.opArray((x.type === "NewExpression" ? "new" : "call"), a)
+      return opArray((x.type === "NewExpression" ? "new" : "call"), a)
     case "MemberExpression":
-      return n.op(".", anon(x.object), anon(x.property))
+      return op(".", fromAST(x.object), fromAST(x.property))
     case "Identifier":
-      return n.variable(x.name)
+      return variable(x.name)
     case "Literal":
-      return n.literal(x.value)
+      return literal(x.value)
     }
   }
 
-  n.toAST = function (x) {
+  function toAST(x) {
   }
 
-  n.fromJSON = function (x) {
+  function fromJSON(x) {
     if (typeof x === "number" || typeof x === "string") {
-      return n.literal(x)
+      return literal(x)
     } else if (Array.isArray(x)) {
-      return n.opArray(x[0], x.slice(1).map(n.fromJSON))
+      return opArray(x[0], x.slice(1).map(fromJSON))
     } else {
       return x
     }
   }
 
-  n.parse = function (s) {
-    return n.fromAST(esprima.parse(s))
+  function parse(s) {
+    return fromAST(esprima.parse(s))
   }
 
   function makeLiteral(s, min, max, info) {
@@ -240,7 +241,7 @@ define(["lib/esprima/esprima"], function (esprima) {
     }
     info.isLiteral = true
     info.op = s
-    n[s] = function (x) {
+    return function (x) {
       var y = Object.create(info)
       y.args = [x]
       if (info.init != null) {
@@ -250,7 +251,7 @@ define(["lib/esprima/esprima"], function (esprima) {
     }
   }
 
-  makeLiteral("bypass", 1, 1, {
+  var bypass = makeLiteral("bypass", 1, 1, {
     isImpure: true, // TODO
     isStatement: true, // TODO
     compile: function (x) {
@@ -258,28 +259,28 @@ define(["lib/esprima/esprima"], function (esprima) {
     }
   })
 
-  makeLiteral("lineComment", 0, 1, {
+  var lineComment = makeLiteral("lineComment", 0, 1, {
     isUseful: true,
     noSemicolon: true,
     compile: function (x) {
       if (x.args[0] == null) {
-        return n.minify("//")
+        return minify("//")
       } else {
-        return n.minify("// " + x.args[0])
+        return minify("// " + x.args[0])
       }
     }
   })
 
-  makeLiteral("blockComment", 0, 1, {
+  var blockComment = makeLiteral("blockComment", 0, 1, {
     isUseful: true,
     noSemicolon: true,
     compile: function (x) {
       if (x.args[0] == null) {
         return "/**/"
       } else {
-        return n.minify("/* " + x.args[0].replace(/\*\/|\n/g, function (s) {
+        return minify("/* " + x.args[0].replace(/\*\/|\n/g, function (s) {
           if (s === "\n") {
-            return "\n" + n.space() + "   "
+            return "\n" + space() + "   "
           } else {
             return "* /"
           }
@@ -288,42 +289,42 @@ define(["lib/esprima/esprima"], function (esprima) {
     }
   })
 
-  makeLiteral("docComment", 0, 1, {
+  var docComment = makeLiteral("docComment", 0, 1, {
     isUseful: true,
     noSemicolon: true,
     compile: function (x) {
       if (x.args[0] == null) {
         return "/**/"
       } else {
-        return "/**\n" + n.space() + " * " + x.args[0].replace(/\*\/|\n/g, function (s) {
+        return "/**\n" + space() + " * " + x.args[0].replace(/\*\/|\n/g, function (s) {
           if (s === "\n") {
-            return "\n" + n.space() + " * "
+            return "\n" + space() + " * "
           } else {
             return "* /"
           }
-        }) + "\n" + n.space() + " */"
+        }) + "\n" + space() + " */"
       }
     }
   })
 
-  makeLiteral("variable", 1, 1, {
+  var variable = makeLiteral("variable", 1, 1, {
     isVariable: true,
     compile: function (x) {
       return mangle(x.args[0])
     }
   })
 
-  makeLiteral("unique", 0, 1, {
+  var unique = makeLiteral("unique", 0, 1, {
     isVariable: true,
     init: function (x) {
       x.id = ++uniqueIds
     },
     compile: function (x) {
-      throw n.error(x, "cannot compile unique, use nino.replace")
+      throw opt.error(x, "cannot compile unique, use nino.replace")
     }
   })
 
-  makeLiteral("literal", 1, 1, function (x) {
+  var literal = makeLiteral("literal", 1, 1, function (x) {
     var y = x.args[0]
     if (typeof y === "string") {
       return "\"" + y.replace(/["\\\b\f\n\r\t\v]/g, function (s) {
@@ -350,13 +351,10 @@ define(["lib/esprima/esprima"], function (esprima) {
     }
   })
 
-  n.makeOp = function (s, info) {
+  function makeOp(s, info) {
     info.op = s
-    n.ops[s] = info
+    ops[s] = info
   }
-
-  n.minified = false
-  n.warnings = true
 
   /*
     Generated with:
@@ -374,7 +372,7 @@ define(["lib/esprima/esprima"], function (esprima) {
         }).join(" ")
       })(this)
   */
-  n.builtins = (function (n) {
+  var builtins = (function (n) {
     "Array ArrayBuffer Boolean clearInterval clearTimeout console DataView Date decodeURI decodeURIComponent encodeURI encodeURIComponent Error escape eval EvalError Float32Array Float64Array Function Infinity Int16Array Int32Array Int8Array isFinite isNaN JSON Math NaN Number Object parseFloat parseInt RangeError ReferenceError RegExp setInterval setTimeout String SyntaxError TypeError Uint16Array Uint32Array Uint8Array Uint8ClampedArray undefined unescape URIError".split(" ").forEach(function (x) { n[x] = true })
     //n["arguments"] = true
 
@@ -387,7 +385,7 @@ define(["lib/esprima/esprima"], function (esprima) {
     return n
   })({})
 
-  n.wrap = function (x, y) {
+  function wrap(x, y) {
     if (x.op === "wrapper") {
       x.args[0] = y
       return x
@@ -396,15 +394,15 @@ define(["lib/esprima/esprima"], function (esprima) {
     }
   }
 
-  n.unwrap = function (x) {
+  function unwrap(x) {
     if (x.op === "wrapper") {
-      return n.unwrap(x.args[0])
+      return unwrap(x.args[0])
     } else {
       return x
     }
   }
 
-  n.print = function (x) {
+  function print(x) {
     if (x.op === "unique") {
       if (x.args[0] == null) {
         return "<unique>"
@@ -414,43 +412,50 @@ define(["lib/esprima/esprima"], function (esprima) {
     } else if (x.isLiteral) {
       return x.compile(x)
     } else if (x.op === "wrapper") {
-      return n.print(x.args[0])
+      return print(x.args[0])
     } else {
       return "(" + x.op + x.args.map(function (x) {
-        return " " + n.print(x)
+        return " " + print(x)
       }).join("") + ")"
     }
   }
 
-  n.space = function () {
-    if (n.minified) {
+  function space() {
+    if (opt.minified) {
       return ""
     } else {
       return new Array((indent * 2) + 1).join(" ")
     }
   }
 
-  n.minify = function (s, s2) {
-    if (n.minified) {
+  function minify(s, s2) {
+    if (opt.minified) {
       return s2 || ""
     } else {
       return s
     }
   }
 
-  n.expression = function (x) {
+  function expressionTop(x) {
     return blockWith(x, "expression")
   }
 
-  n.statement = function (x) {
+  function statementTop(x) {
     return blockWith(x, "statement")
   }
 
-  n.compile = function (x) {
+  /*function moduleTop(x) {
+    var requires = []
+      , exports  = []
+
+    return statementTop(op("call", variable("require"), op("function", op(","), x)))
+  }*/
+
+  function compileTop(x) {
     return compileFn(x)
   }
 
-  n.traverse = function (x, scope) {
+  function traverse(x, scope) {
     var scopes = [{ seen: scope, bound: {} }]
 
     function seen(x) {
@@ -468,7 +473,7 @@ define(["lib/esprima/esprima"], function (esprima) {
 
     function bind(w) {
       var last = scopes[scopes.length - 1]
-        , x    = n.unwrap(w)
+        , x    = unwrap(w)
       if (x.op === "variable") {
         last.bound[compile(x)] = true
         seen(x)
@@ -491,15 +496,15 @@ define(["lib/esprima/esprima"], function (esprima) {
     }
 
     function traverse(w) {
-      var x = n.unwrap(w)
+      var x = unwrap(w)
       if (x.isLiteral) {
         seen(x)
       } else if (x.op === "function") {
         x.seenVariables = {}
         x.boundUniques = {}
         withScope(x, function () {
-          seen(n.variable("arguments"))
-          n.unwrap(x.args[0]).args.forEach(bind)
+          seen(variable("arguments"))
+          unwrap(x.args[0]).args.forEach(bind)
           if (x.args.length > 1) {
             traverse(x.args[1])
           }
@@ -509,15 +514,15 @@ define(["lib/esprima/esprima"], function (esprima) {
         x.seenVariables = {}
         x.boundUniques = {}
         withScope(x, function () {
-          seen(n.variable("arguments"))
-          n.unwrap(x.args[1]).args.forEach(bind)
+          seen(variable("arguments"))
+          unwrap(x.args[1]).args.forEach(bind)
           if (x.args.length > 2) {
             traverse(x.args[2])
           }
         })
       } else if (x.op === "var") {
         x.args.forEach(function (w) {
-          var x = n.unwrap(w)
+          var x = unwrap(w)
           if (x.op === "=") {
             bind(x.args[0])
             traverse(x.args[1]) // TODO
@@ -542,7 +547,7 @@ define(["lib/esprima/esprima"], function (esprima) {
     return x
   }
 
-  n.replace = function (x, scope) {
+  function replace(x, scope) {
     var replace = {}
       , uniques
 
@@ -563,23 +568,23 @@ define(["lib/esprima/esprima"], function (esprima) {
     }
 
     function seen(w) {
-      var x = n.unwrap(w)
+      var x = unwrap(w)
       if (x.op === "unique") {
         var s = replace[x.id]
         if (s == null) {
-          s = replace[x.id] = (x.args[0] != null && !n.minified
-                                ? n.getUnique(mangle(x.args[0]), scope)
+          s = replace[x.id] = (x.args[0] != null && !opt.minified
+                                ? getUnique(mangle(x.args[0]), scope)
                                 : getUniq(scope))
         }
         scope[s] = true
-        return n.wrap(w, n.variable(s)) // TODO clone
+        return wrap(w, variable(s)) // TODO clone
       } else {
         return w
       }
     }
 
     function binder(w) {
-      var x = n.unwrap(w)
+      var x = unwrap(w)
       if (x.isLiteral) {
         if (x.op === "unique") {
           if (replace[x.id] != null) {
@@ -597,12 +602,12 @@ define(["lib/esprima/esprima"], function (esprima) {
     }
 
     function traverse(w) {
-      var x = n.unwrap(w)
+      var x = unwrap(w)
       if (x.isLiteral) {
         return seen(w)
       } else if (x.op === "function") {
         withScope(x, function () {
-          var args = n.unwrap(x.args[0])
+          var args = unwrap(x.args[0])
 
           args.args.forEach(binder)
           if (x.args.length > 1) {
@@ -617,7 +622,7 @@ define(["lib/esprima/esprima"], function (esprima) {
       } else if (x.op === "function-var") {
         x.args[0] = seen(x.args[0]) // TODO test this
         withScope(x, function () {
-          var args = n.unwrap(x.args[1])
+          var args = unwrap(x.args[1])
 
           args.args.forEach(binder)
           if (x.args.length > 2) {
@@ -631,13 +636,13 @@ define(["lib/esprima/esprima"], function (esprima) {
         })
       } else if (x.op === "var") {
         x.args = x.args.map(function (w) {
-          var x = n.unwrap(w)
+          var x = unwrap(w)
           if (x.op === "=") {
             x.args[0] = seen(x.args[0])
             x.args[1] = traverse(x.args[1]) // TODO
             return w
           } else {
-            return n.wrap(w, seen(x))
+            return wrap(w, seen(x))
           }
         })
       } else {
@@ -679,7 +684,7 @@ define(["lib/esprima/esprima"], function (esprima) {
     if (reserved[s]) {
       return "_" + s
     } else {
-      return n.mangle(s).replace(/^[0-9]/, function (s) {
+      return opt.mangle(s).replace(/^[0-9]/, function (s) {
         return "_" + s
       })
     }
@@ -733,19 +738,19 @@ define(["lib/esprima/esprima"], function (esprima) {
       return serialize([].slice.call(x))
 
     default:
-      if (n.warnings) {
+      if (opt.warnings) {
         console.warn("serializing object, identity and prototype will be lost")
       }
       switch (s) {
       case "[object Array]":
-        if (n.minified) {
+        if (opt.minified) {
           return "[" + [].map.call(x, serialize).join(",") + "]"
         } else {
           return "[" + [].map.call(x, serialize).join(", ") + "]"
         }
 
       case "[object Object]":
-        if (n.minified) {
+        if (opt.minified) {
           return "(" + JSON.stringify(x) + ")"
         } else {
           return "(" + JSON.stringify(x, null, 2) + ")"
@@ -769,20 +774,8 @@ define(["lib/esprima/esprima"], function (esprima) {
 
   // mangle("50fooBar-qux")
 
-  /*n.onScope.push(function (scope) {
-    if (scope.vars == null) {
-      scope.vars = Object.create(vars)
-    }
-    if (scope.uniques == null) {
-      scope.uniques = Object.create(uniques)
-    }
-
-    vars  = Object.create(vars)
-    uniques = Object.create(scope)
-  })*/
-
   function jsProp(w) {
-    var x = n.unwrap(w), y
+    var x = unwrap(w), y
     if (x.op === "literal" && typeof (y = x.args[0]) === "string") {
       if (/^[$_a-zA-Z][$_a-zA-Z0-9]*$/.test(y)) {
         return y
@@ -791,22 +784,22 @@ define(["lib/esprima/esprima"], function (esprima) {
   }
 
   function propToString(w) {
-    var x = n.unwrap(w)
+    var x = unwrap(w)
     if (x.op === "literal") {
       return x
     } else if (x.op === "variable") {
-      return n.wrap(w, n.literal(x.args[0]))
+      return wrap(w, literal(x.args[0]))
     } else {
-      throw n.error("expected literal or variable")
+      throw opt.error("expected literal or variable")
     }
   }
 
   function compile(w) {
-    var x = n.unwrap(w)
+    var x = unwrap(w)
       , s = x.compile(x)
-    if (x.isUseless && n.warnings) {
+    if (x.isUseless && opt.warnings) {
       if (/\n/.test(s)) {
-        console.warn("useless expression:\n" + n.space() + s)
+        console.warn("useless expression:\n" + space() + s)
       } else {
         console.warn("useless expression: " + s)
       }
@@ -815,7 +808,7 @@ define(["lib/esprima/esprima"], function (esprima) {
   }
 
   function compileFn(w) {
-    var x = n.unwrap(w)
+    var x = unwrap(w)
     if (x.op === "function" || x.op === "object") {
       return "(" + compile(x) + ")"
     } else {
@@ -826,48 +819,47 @@ define(["lib/esprima/esprima"], function (esprima) {
   function withBraces(x) {
     return (x == null || (x.op === ";" && x.args.length === 0)
              ? "{}"
-             : "{" + n.minify("\n") + block(x) + n.minify("\n") + n.space() + "}")
+             : "{" + minify("\n") + block(x) + minify("\n") + space() + "}")
   }
 
   function compileFunction(name, args, body) {
     return resetPriority(0, function () {
-      // n.changeScope(this.scope)
       return withScope("function", function () {
-        args = n.unwrap(args).args.map(compile).join("," + n.minify(" "))
-        return "function" + (name ? " " + name : n.minify(" ")) + "(" +
-                 args + ")" + n.minify(" ") + withBraces(body)
+        args = unwrap(args).args.map(compile).join("," + minify(" "))
+        return "function" + (name ? " " + name : minify(" ")) + "(" +
+                 args + ")" + minify(" ") + withBraces(body)
       })
     })
   }
 
   function compileBlock(name, test, body) {
     return resetPriority(0, function () {
-      return name + n.minify(" ") + test + withBraces(body)
+      return name + minify(" ") + test + withBraces(body)
     })
   }
 
   function compileLoop(x, name, test, body) {
     return withScope("loop", function () {
-      if (body == null || (body = n.unwrap(body)).op === ";") {
-        n.unwrap(x).noSemicolon = true
-        return compileBlock(name, "(" + test + ")" + n.minify(" "), body)
+      if (body == null || (body = unwrap(body)).op === ";") {
+        unwrap(x).noSemicolon = true
+        return compileBlock(name, "(" + test + ")" + minify(" "), body)
       } else {
         return resetPriority(0, function () {
-          return name + n.minify(" ") + "(" + test + ")" + n.minify("\n") + block(body)
+          return name + minify(" ") + "(" + test + ")" + minify("\n") + block(body)
         })
       }
     })
   }
 
   function useless(w) {
-    var x = n.unwrap(w)
+    var x = unwrap(w)
     if (!isImpure(x) && !x.isUseful) { // TODO
       x.isUseless = true
     }
   }
 
   /*function contains(w, x) {
-    var y = n.unwrap(w)
+    var y = unwrap(w)
     if (y === x) {
       return true
     } else if (y.isLiteral) {
@@ -883,21 +875,21 @@ define(["lib/esprima/esprima"], function (esprima) {
     var len = x.args.length
     if ((min != null && len < min) || (max != null && len > max)) {
       if (max == null) {
-        throw n.error(x, "expected at least " + min + " argument but got " + len)
+        throw opt.error(x, "expected at least " + min + " argument but got " + len)
       } else if (min == null) {
-        throw n.error(x, "expected at most " + max + " argument but got " + len)
+        throw opt.error(x, "expected at most " + max + " argument but got " + len)
       }
 
       if (min === max) {
-        throw n.error(x, "expected " + min + " arguments but got " + len)
+        throw opt.error(x, "expected " + min + " arguments but got " + len)
       } else {
-        throw n.error(x, "expected " + min + " to " + max + " arguments but got " + len)
+        throw opt.error(x, "expected " + min + " to " + max + " arguments but got " + len)
       }
     }
   }
 
-  function stmt(s, isBreak, f) {
-    n.makeOp(s, {
+  function makeOpStatement(s, isBreak, f) {
+    makeOp(s, {
       isImpure: true,
       isStatement: true,
       isBreak: isBreak,
@@ -916,22 +908,22 @@ define(["lib/esprima/esprima"], function (esprima) {
               y.args.length > 1 &&
               (isStatement(y.args[1]) ||
                (y.args.length > 2 && isStatement(y.args[2])))) {
-            y.args[1] = n.op(s, y.args[1])
+            y.args[1] = op(s, y.args[1])
             if (y.args.length > 2) {
-              y.args[2] = n.op(s, y.args[2])
+              y.args[2] = op(s, y.args[2])
             } else if (!b) {
-              y.args[2] = n.op(s)
+              y.args[2] = op(s)
             }
             statement(y)
             return
           } else if (y.op === "try") {
-            y.args[0] = n.op(s, y.args[0])
+            y.args[0] = op(s, y.args[0])
             y.args.slice(1).forEach(function (y, i) {
               if (y.op === "catch") {
                 if (y.args.length > 1) {
-                  y.args[1] = n.op(s, y.args[1])
+                  y.args[1] = op(s, y.args[1])
                 } else if (!b) {
-                  y.args[1] = n.op(s)
+                  y.args[1] = op(s)
                 }
               }
             })
@@ -943,7 +935,7 @@ define(["lib/esprima/esprima"], function (esprima) {
         x.args = x.args.map(expression)
 
         if (x.args.length > 0 && s === "return") { // TODO ew
-          var y = n.unwrap(x.args[0])
+          var y = unwrap(x.args[0])
           if (y.op === "void") {
             if (isImpure(y.args[0])) {
               statements.push(y.args[0])
@@ -957,14 +949,14 @@ define(["lib/esprima/esprima"], function (esprima) {
         }
       },
       expression: function (x) {
-        if (n.warnings) {
+        if (opt.warnings) {
           console.warn("\"" + s + "\" was used in expression position")
         }
         if (x.isBreak) {
           expressions.forEach(function (y) {
             if (isImpure(y)/* && !contains(y, x)*/) {
               statement(y)
-              y.args[0] = n.op("void", n.literal(0))
+              y.args[0] = op("void", literal(0))
             }
           })
         } else {
@@ -972,7 +964,7 @@ define(["lib/esprima/esprima"], function (esprima) {
         }
         expressions = []
         statement(x)
-        return expression(n.op("void", n.literal(0)))
+        return expression(op("void", literal(0)))
       },
       compile: function (x) {
         if (f != null) {
@@ -988,22 +980,22 @@ define(["lib/esprima/esprima"], function (esprima) {
   }
 
   function spliceBlock(w, i) {
-    var x = n.unwrap(w)
-      , y = n.unwrap(x.args[i])
+    var x = unwrap(w)
+      , y = unwrap(x.args[i])
     if (y.op === ",") {
       while (y.op === ",") {
         y.args.slice(0, -1).forEach(statement)
-        y = n.unwrap(y.args[y.args.length - 1])
+        y = unwrap(y.args[y.args.length - 1])
       }
-      x.args[i] = n.wrap(x.args[i], y)
+      x.args[i] = wrap(x.args[i], y)
     }
   }
 
   function typer(args, ret) {
     return function () {
-      return n.type("function", args.map(function (x) {
-        return n.type(x)
-      }), n.type(ret))
+      return type("function", args.map(function (x) {
+        return type(x)
+      }), type(ret))
     }
   }
 
@@ -1012,15 +1004,15 @@ define(["lib/esprima/esprima"], function (esprima) {
       if (r.length === 1) {
         return r[0]
       } else {
-        return n.opArray("call", n.op(".", r[0], n.literal("concat")),
-                                 r.slice(1))
+        return opArray("call", op(".", r[0], literal("concat")),
+                               r.slice(1))
       }
     } else {
-      l = n.opArray("array", l)
+      l = opArray("array", l)
       if (r.length === 0) {
         return l
       } else {
-        return n.opArray("call", n.op(".", l, n.literal("concat")), r)
+        return opArray("call", op(".", l, literal("concat")), r)
       }
     }
   }
@@ -1030,12 +1022,12 @@ define(["lib/esprima/esprima"], function (esprima) {
       , r2 = []
       , seen
     a.forEach(function (w) {
-      var x = n.unwrap(w)
+      var x = unwrap(w)
       if (x.op === "...") {
         seen = true
         r2.push(expression(x.args[0]))
       } else if (seen) {
-        r2.push(expression(n.op("array", w)))
+        r2.push(expression(op("array", w)))
       } else {
         r1.push(expression(w))
       }
@@ -1047,8 +1039,8 @@ define(["lib/esprima/esprima"], function (esprima) {
     }
   }
 
-  function makeAssignOp(s, s2) {
-    n.makeOp(s, {
+  function makeOpAssign(s, s2) {
+    makeOp(s, {
       unary: 75,
       binary: 10,
       isImpure: true,
@@ -1061,7 +1053,7 @@ define(["lib/esprima/esprima"], function (esprima) {
           return x
         case 2:
           // TODO should this be before or after expression ?
-          var y = n.unwrap(x.args[1])
+          var y = unwrap(x.args[1])
           if (y.op === "literal" && y.args[0] === 1) {
             x.args = [x.args[0]]
           }
@@ -1073,26 +1065,26 @@ define(["lib/esprima/esprima"], function (esprima) {
         // TODO code duplication with op
         if (x.args.length === 1) {
           return withPriority(x.unary, function () {
-            var right = n.unwrap(x.args[0])
+            var right = unwrap(x.args[0])
             if (x.unary === right.unary) {
-              throw n.error(x, "invalid assignment") // s2 + compile(right)
+              throw opt.error(x, "invalid assignment") // s2 + compile(right)
             }
             return s + compile(right)
           })
         } else {
           return withPriority(x.binary, function () {
-            var left  = n.unwrap(x.args[0])
-              , right = n.unwrap(x.args[1])
+            var left  = unwrap(x.args[0])
+              , right = unwrap(x.args[1])
             if (x.binary === left.binary) {
-              throw n.error(x, "invalid left hand side for assignment")
+              throw opt.error(x, "invalid left hand side for assignment")
                                    /*
                                    compile(left) + ")" +
-                                   n.minify(" ") + s2 + n.minify(" ") +
+                                   minify(" ") + s2 + minify(" ") +
                                    compile(right)
                                    */
             }
             return compileFn(left) +
-                   n.minify(" ") + s2 + n.minify(" ") +
+                   minify(" ") + s2 + minify(" ") +
                    compile(right)
           })
         }
@@ -1100,12 +1092,13 @@ define(["lib/esprima/esprima"], function (esprima) {
     })
   }
 
-  function op(s, o) {
+  function makeOpHelper(s, o) {
     var s2 = o.name || s
-    n.makeOp(s, {
+    makeOp(s, {
       unary: o.unary,
       binary: o.binary,
       isImpure: o.isImpure,
+      destructure: o.destructure,
       statement: function (x) {
         if (x.args.length === 1) {
           spliceBlock(x, 0)
@@ -1128,25 +1121,25 @@ define(["lib/esprima/esprima"], function (esprima) {
               var len = x.args.length - 1
                 , r   = []
               if (isImpure(x.args[0]) && x.args.slice(1).some(isImpure)) {
-                var u = n.unique()
-                statements.push(n.op("var", n.op("=", u, x.args[0])))
+                var u = unique()
+                statements.push(op("var", op("=", u, x.args[0])))
                 x.args[0] = u
               }
               x.args.reduce(function (x, y, i) {
                 if (isImpure(y) && i !== len) {
-                  var u = n.unique()
-                  statements.push(n.op("var", n.op("=", u, y)))
-                  r.push(n.op(s, x, u))
+                  var u = unique()
+                  statements.push(op("var", op("=", u, y)))
+                  r.push(op(s, x, u))
                   return u
                 } else {
-                  r.push(n.op(s, x, y))
+                  r.push(op(s, x, y))
                   return y
                 }
               })
-              return expression(n.opArray(o.pairwise, r))
+              return expression(opArray(o.pairwise, r))
             } else {
               return expression(x.args.reduce(function (x, y) {
-                return n.op(s, x, y)
+                return op(s, x, y)
               }))
             }
           }
@@ -1173,7 +1166,7 @@ define(["lib/esprima/esprima"], function (esprima) {
       compile: function (x) {
         if (x.args.length === 1) {
           return withPriority(x.unary, function () {
-            var right = n.unwrap(x.args[0])
+            var right = unwrap(x.args[0])
 
             if (x.unary === right.unary) {
               if (o.wrap && x.op === right.op && right.args.length === 1) {
@@ -1185,22 +1178,22 @@ define(["lib/esprima/esprima"], function (esprima) {
           })
         } else {
           return withPriority(x.binary, function () {
-            var left  = n.unwrap(x.args[0])
-              , right = n.unwrap(x.args[1])
+            var left  = unwrap(x.args[0])
+              , right = unwrap(x.args[1])
 
             if (o.order === "right") {
               if (x.binary === left.binary) {
-                throw n.error(x, "invalid left hand side for assignment")
+                throw opt.error(x, "invalid left hand side for assignment")
                                      /*
                                      compile(left) + ")" +
-                                     n.minify(" ") + s2 + n.minify(" ") +
+                                     minify(" ") + s2 + minify(" ") +
                                      compile(right)
                                      */
               }
             } else if (x.binary === right.binary) {
               if (x.binary === left.binary && left.args.length === 2) {
                 return "(" + compile(left) + ")" +
-                       n.minify(" ") + s2 + n.minify(" ") +
+                       minify(" ") + s2 + minify(" ") +
                        "(" + compile(right) + ")"
               } else {
                 var temp = left
@@ -1209,14 +1202,14 @@ define(["lib/esprima/esprima"], function (esprima) {
                 // TODO code duplication
                 if (o.wrap && x.op === right.op && right.args.length === 1) {
                   return compileFn(left) +
-                         n.minify(" ") + s2 + n.minify(" ") +
+                         minify(" ") + s2 + minify(" ") +
                          "(" + compile(right) + ")"
                 }
               }
             }
 
             return compileFn(left) +
-                   n.minify(" ") + s2 + n.minify(" ") +
+                   minify(" ") + s2 + minify(" ") +
                    compile(right)
           })
         }
@@ -1227,24 +1220,24 @@ define(["lib/esprima/esprima"], function (esprima) {
   function optimizeVar(x, a) {
     var r = []
     x.forEach(function (w) {
-      var x = n.unwrap(w)
+      var x = unwrap(w)
         , y
         , z
-      if (x.op === "=" && (y = n.unwrap(x.args[1])).op === "function") {
+      if (x.op === "=" && (y = unwrap(x.args[1])).op === "function") {
         if (r.length) {
-          a.push(n.opArray("var", r))
+          a.push(opArray("var", r))
           r = []
         }
-        z = n.op("function-var", x.args[0], y.args[0], y.args[1])
+        z = op("function-var", x.args[0], y.args[0], y.args[1])
         z.seenVariables = y.seenVariables // TODO clone
         z.boundUniques = y.boundUniques // TODO clone
-        a.push(n.wrap(w, z))
+        a.push(wrap(w, z))
       } else {
-        r.push(n.wrap(w, x))
+        r.push(wrap(w, x))
       }
     })
     if (r.length) {
-      a.push(n.opArray("var", r))
+      a.push(opArray("var", r))
     }
   }
 
@@ -1257,9 +1250,10 @@ define(["lib/esprima/esprima"], function (esprima) {
       if (type === "statement") {
         statement(w)
       } else if (type === "expression") {
-        var x = n.unwrap(w)
-        if (x.op === ",") {
-          ;(function (len) {
+        ;(function () {
+          var x = unwrap(w)
+          if (x.op === ",") {
+            var len = x.args.length - 1
             x.args.forEach(function (x, i) {
               if (i === len) {
                 statements.push(expression(x))
@@ -1267,27 +1261,35 @@ define(["lib/esprima/esprima"], function (esprima) {
                 statement(x)
               }
             })
-          })(x.args.length - 1)
-        } else {
-          statements.push(expression(w))
-        }
+          } else {
+            var w2 = expression(w)
+            x = unwrap(w2)
+            if (x.op === ",") {
+              x.args.forEach(function (x) {
+                statements.push(x)
+              })
+            } else {
+              statements.push(w2)
+            }
+          }
+        })()
       }
       var a = []
         , r = []
         , seen
       statements.forEach(function (w) {
-        var x = n.unwrap(w)
+        var x = unwrap(w)
         if (x.op === "var") {
           r = r.concat(x.args)
         } else {
           var b = false
           if (r.length) {
-            var last = n.unwrap(r[r.length - 1])
+            var last = unwrap(r[r.length - 1])
             b = (x.op === "=" &&
                  last.isVariable &&
-                 last.args[0] === n.unwrap(x.args[0]).args[0])
+                 last.args[0] === unwrap(x.args[0]).args[0])
             if (b) {
-              r[r.length - 1] = n.wrap(r[r.length - 1], x)
+              r[r.length - 1] = wrap(r[r.length - 1], x)
             }
             optimizeVar(r, a)
             r = []
@@ -1301,7 +1303,7 @@ define(["lib/esprima/esprima"], function (esprima) {
             } else if (x.isBreak) {
               seen = true
             }
-            a.push(n.wrap(w, x))
+            a.push(wrap(w, x))
           }
         }
       })
@@ -1319,9 +1321,9 @@ define(["lib/esprima/esprima"], function (esprima) {
         })
       }
       if (a.length === 1) {
-        return n.wrap(w, a[0])
+        return wrap(w, a[0])
       } else {
-        return n.wrap(w, n.opArray(";", a))
+        return wrap(w, opArray(";", a))
       }
     } finally {
       statements  = old
@@ -1331,12 +1333,12 @@ define(["lib/esprima/esprima"], function (esprima) {
 
   // TODO better simple detection
   function isSimple(w) {
-    var x = n.unwrap(w)
+    var x = unwrap(w)
     return x.op === "literal" || x.op === "unique" || x.op === "variable"
   }
 
   function isImpure(w) {
-    var x = n.unwrap(w)
+    var x = unwrap(w)
     if (x.isImpure) {
       return true
     } else if (x.isLiteral || x.isFunction) {
@@ -1347,7 +1349,7 @@ define(["lib/esprima/esprima"], function (esprima) {
   }
 
   function isStatement(w) {
-    var x = n.unwrap(w)
+    var x = unwrap(w)
     if (x.isStatement) {
       return true
     } else if (x.isLiteral || x.isFunction) {
@@ -1379,80 +1381,45 @@ define(["lib/esprima/esprima"], function (esprima) {
     })
   }
 
-  function withValue(r, x) {
+  function withValue(x, f) {
     if (!isSimple(x)) {
-      var u = n.unique()
-      r.push(n.op("var", n.op("=", u, x)))
-      return u
+      var u = unique()
+      return [op("var", op("=", u, x))].concat(f(u))
     } else {
-      return x
+      return f(x)
     }
   }
 
   function assignToVar(x) {
-    if (n.unwrap(x).op === "=") {
-      return n.op("var", x)
-    } else {
-      return x
-    }
+    return op("var", x)
   }
 
-  function destructureSlice(r, x, value, i, iLen) {
-    var a = [n.op(".", n.op(".", n.op("array"),
-                                 n.literal("slice")),
-                       n.literal("call")),
-             value]
+  function destructureSlice(x, value, i, iLen, f) {
+    var a = [op(".", op(".", op("array"), literal("slice")), literal("call")), value]
     var len = iLen - 1
     if (i !== len) {
-      a.push(n.literal(i))
-      a.push(n.literal(i - len))
+      a.push(literal(i))
+      a.push(literal(i - len))
     } else if (i !== 0) {
-      a.push(n.literal(i))
+      a.push(literal(i))
     }
-    destructure(r, x, n.opArray("call", a))
+    return destructure(x, opArray("call", a), f)
   }
 
-  function destructureLength(r, x, value, i) {
-    destructure(r, x, n.op(".", value,
-                                n.op("-", n.op(".", value, n.literal("length")),
-                                          n.literal(i))))
+  function destructureLength(x, value, i, f) {
+    return destructure(x, op(".", value,
+                                  op("-", op(".", value, literal("length")),
+                                          literal(i))), f)
   }
 
-  function destructure(r, pattern, value) {
-    var x = n.unwrap(pattern)
-    if (x.op === "array") {
-      value = withValue(r, value)
-      var i = 0, iLen = x.args.length
-      while (i < iLen) {
-        (function (w) {
-          var y = n.unwrap(w)
-          if (y.op === "...") {
-            destructureSlice(r, y.args[0], value, i, iLen)
-            ++i
-            while (i < iLen) {
-              destructureLength(r, x.args[i], value, iLen - i)
-              ++i
-            }
-          } else if (y.op !== "empty") {
-            destructure(r, w, n.op(".", value, n.literal(i)))
-          }
-        })(x.args[i])
-        ++i
-      }
-    } else if (x.op === "object") {
-      value = withValue(r, value)
-      x.args.forEach(function (w) {
-        var x = n.unwrap(w)
-        if (x.op === "=") {
-          destructure(r, x.args[1], n.op(".", value, propToString(x.args[0])))
-        } else {
-          destructure(r, x, n.op(".", value, propToString(x)))
-        }
-      })
+  function destructure(pattern, value, f) {
+    var x = unwrap(pattern)
+    if (x.destructure != null) {
+      return x.destructure(x, value, f)
     } else if (x.isVariable) {
-      r.push(n.op("=", pattern, value))
+      return [f(op("=", pattern, value))]
     } else {
-      throw n.error(pattern, "expected array, object, or variable")
+      throw opt.error(pattern, "cannot destructure")
     }
   }
 
@@ -1511,7 +1478,7 @@ define(["lib/esprima/esprima"], function (esprima) {
 */
 
   function expressionFn(x, min, max) {
-    var args = n.unwrap(x.args[min])
+    var args = unwrap(x.args[min])
       , r    = []
       , a    = []
       , i    = 0
@@ -1519,31 +1486,31 @@ define(["lib/esprima/esprima"], function (esprima) {
 
     while (i < iLen) {
       (function (w) {
-        var x = n.unwrap(w)
+        var x = unwrap(w)
         if (x.isVariable) {
           a.push(expression(w))
         } else {
           var u
           if (x.op === "...") {
             if (i === iLen - 1) {
-              u = n.variable("arguments")
+              u = variable("arguments")
             } else {
-              u = n.unique()
-              r.push(n.op("var", n.op("=", u, n.variable("arguments"))))
+              u = unique()
+              r.push(op("var", op("=", u, variable("arguments"))))
             }
-            destructureSlice(r, x.args[0], u, i, iLen)
+            r = r.concat(destructureSlice(x.args[0], u, i, iLen, assignToVar))
             ++i
             while (i < iLen) {
               x = args.args[i]
-              if (n.unwrap(x).op !== "empty") {
-                destructureLength(r, x, u, iLen - i)
+              if (unwrap(x).op !== "empty") {
+                r = r.concat(destructureLength(x, u, iLen - i, assignToVar))
               }
               ++i
             }
           } else {
-            u = n.unique()
+            u = unique()
             if (x.op !== "empty") {
-              destructure(r, w, u)
+              r = r.concat(destructure(w, u, assignToVar))
             }
             a.push(expression(u))
           }
@@ -1554,11 +1521,10 @@ define(["lib/esprima/esprima"], function (esprima) {
     args.args = a
 
     if (r.length) {
-      r = r.map(assignToVar)
       if (x.args.length > max) {
         r = r.concat([x.args[max]])
       }
-      x.args[max] = n.opArray(",", r)
+      x.args[max] = opArray(",", r)
     }
     if (x.args.length > max) {
       x.args[max] = functionStatement(x.args[max])
@@ -1566,17 +1532,17 @@ define(["lib/esprima/esprima"], function (esprima) {
   }
 
   function expression(w) {
-    var x = n.unwrap(w)
+    var x = unwrap(w)
       , y = x.expression(x)
     if (!x.isStatement) {
-      y = n.op("wrapper", y)
+      y = op("wrapper", y)
       expressions.push(y)
     }
-    return n.wrap(w, y)
+    return wrap(w, y)
   }
 
   function statement(w) {
-    var x = n.unwrap(w)
+    var x = unwrap(w)
     if (x.statement) {
       x.statement(x)
     } else {
@@ -1587,8 +1553,8 @@ define(["lib/esprima/esprima"], function (esprima) {
   function pushExpressions(x, f) {
     expressions.forEach(function (y) {
       if (/*!contains(y, x) && */f(y)) {
-        var u = n.unique()
-        statement(n.op("var", n.op("=", u, y.args[0])))
+        var u = unique()
+        statement(op("var", op("=", u, y.args[0])))
         y.args[0] = u
       }
     })
@@ -1600,9 +1566,9 @@ define(["lib/esprima/esprima"], function (esprima) {
   }
 
   function functionStatement(x) {
-    var y = n.unwrap(x)
+    var y = unwrap(x)
     while (y.op === ",") {
-      y = n.unwrap(y.args[y.args.length - 1])
+      y = unwrap(y.args[y.args.length - 1])
     }
     y.isLast = true
     return blockStatement(x)
@@ -1630,42 +1596,42 @@ define(["lib/esprima/esprima"], function (esprima) {
 
   function block(x) {
     return withIndent(indent + 1, function () {
-      return n.space() + compileFn(x)
+      return space() + compileFn(x)
     })
   }
 
   /**
    *  Operators
    */
-  n.makeOp("wrapper", {})
+  makeOp("wrapper", {})
 
-  op("!", {
+  makeOpHelper("!", {
     type: typer(["bool"], "bool"),
     unary: 70,
     args: 1
   })
 
-  op("~", {
+  makeOpHelper("~", {
     type: typer(["int"], "int"),
     unary: 70,
     args: 1
   })
 
-  op("typeof", {
+  makeOpHelper("typeof", {
     type: typer(["any"], "str"),
     unary: 70,
     args: 1,
     name: "typeof "
   })
 
-  op("void", {
+  makeOpHelper("void", {
     type: typer(["any"], "void"),
     unary: 70,
     args: 1,
     name: "void "
   })
 
-  op("delete", {
+  makeOpHelper("delete", {
     type: typer(["any"], "bool"),
     unary: 70,
     args: 1,
@@ -1673,145 +1639,145 @@ define(["lib/esprima/esprima"], function (esprima) {
     isImpure: true
   })
 
-  op("*", {
+  makeOpHelper("*", {
     type: typer(["num", "num"], "num"),
     binary: 65
   })
 
-  op("/", {
+  makeOpHelper("/", {
     type: typer(["num", "num"], "num"),
     binary: 65
   })
 
-  op("%", {
+  makeOpHelper("%", {
     type: typer(["num", "num"], "num"),
     binary: 65,
     args: 2
   })
 
-  op("+", {
+  makeOpHelper("+", {
     type: typer(["strnum", "strnum"], ["|", "num", "str"]),
     binary: 60,
     unary: 70,
     wrap: true
   })
 
-  op("-", {
+  makeOpHelper("-", {
     type: typer(["num", "num"], "num"),
     binary: 60,
     unary: 70,
     wrap: true
   })
 
-  op("<<", {
+  makeOpHelper("<<", {
     type: typer(["int", "int"], "int"),
     binary: 55,
     args: 2
   })
 
-  op(">>", {
+  makeOpHelper(">>", {
     type: typer(["int", "int"], "int"),
     binary: 55,
     args: 2
   })
 
-  op(">>>", {
+  makeOpHelper(">>>", {
     type: typer(["int", "int"], "int"),
     binary: 55,
     args: 2
   })
 
-  op("<", {
+  makeOpHelper("<", {
     type: typer(["strnum", "strnum"], "bool"),
     binary: 50,
     pairwise: "&&"
   })
 
-  op("<=", {
+  makeOpHelper("<=", {
     type: typer(["strnum", "strnum"], "bool"),
     binary: 50,
     pairwise: "&&"
   })
 
-  op(">", {
+  makeOpHelper(">", {
     type: typer(["strnum", "strnum"], "bool"),
     binary: 50,
     pairwise: "&&"
   })
 
-  op(">=", {
+  makeOpHelper(">=", {
     type: typer(["strnum", "strnum"], "bool"),
     binary: 50,
     pairwise: "&&"
   })
 
-  op("in", {
+  makeOpHelper("in", {
     type: typer(["str", "object"], "bool"),
     binary: 50,
     args: 2,
     name: " in "
   })
 
-  op("instanceof", {
+  makeOpHelper("instanceof", {
     type: typer(["object", "function"], "bool"),
     binary: 50,
     args: 2,
     name: " instanceof "
   })
 
-  op("==", {
+  makeOpHelper("==", {
     type: typer(["any", "any"], "bool"),
     binary: 45,
     pairwise: "&&"
   })
 
-  op("!=", {
+  makeOpHelper("!=", {
     type: typer(["any", "any"], "bool"),
     binary: 45,
     pairwise: "&&"
   })
 
-  op("===", {
+  makeOpHelper("===", {
     type: typer(["any", "any"], "bool"),
     binary: 45,
     pairwise: "&&"
   })
 
-  op("!==", {
+  makeOpHelper("!==", {
     type: typer(["any", "any"], "bool"),
     binary: 45,
     pairwise: "&&"
   })
 
-  op("&", {
+  makeOpHelper("&", {
     type: typer(["int", "int"], "int"),
     binary: 40,
     args: 2
   })
 
-  op("^", {
+  makeOpHelper("^", {
     type: typer(["int", "int"], "int"),
     binary: 35,
     args: 2
   })
 
-  op("|", {
+  makeOpHelper("|", {
     type: typer(["int", "int"], "int"),
     binary: 30,
     args: 2
   })
 
-  op("&&", {
+  makeOpHelper("&&", {
     type: typer(["bool", "bool"], "bool"),
     binary: 25
   })
 
-  op("||", {
+  makeOpHelper("||", {
     type: typer(["bool", "bool"], "bool"),
     binary: 20
   })
 
-  op("=", {
+  makeOpHelper("=", {
     // TODO
     type: function (x) {
       x = x.args[1]
@@ -1821,61 +1787,95 @@ define(["lib/esprima/esprima"], function (esprima) {
     args: 2,
     order: "right",
     isImpure: true,
+    destructure: function (x, value, f) {
+      return withValue(value, function (value) {
+        return destructure(x.args[0],
+                           op("if", op("===", value, op("void", literal(0))),
+                                    x.args[1],
+                                    value),
+                           f)
+      })
+    },
     expression: function (x) {
-      var a = []
+      var a = destructure(x.args[0], x.args[1], function (x) { return x })
         , l = []
         , r = []
-      destructure(a, x.args[0], expression(x.args[1]))
       a.forEach(function (x) {
-        if (n.unwrap(x).op === "var") {
+        if (unwrap(x).op === "var") {
           l.push(x)
         } else {
           r.push(x)
         }
       })
-      return n.opArray(",", l.concat(r))
+      return opArray(",", l.concat(r).map(function (w) {
+        var x = unwrap(w)
+        if (x.op === "=") {
+          x.args[1] = expression(x.args[1])
+          return w
+        } else {
+          return expression(w)
+        }
+      }))
     }
   })
 
-  op("*=",         { binary: 10, args: 2, order: "right", isImpure: true })
-  op("/=",         { binary: 10, args: 2, order: "right", isImpure: true })
-  op("%=",         { binary: 10, args: 2, order: "right", isImpure: true })
-  op("<<=",        { binary: 10, args: 2, order: "right", isImpure: true })
-  op(">>=",        { binary: 10, args: 2, order: "right", isImpure: true })
-  op(">>>=",       { binary: 10, args: 2, order: "right", isImpure: true })
-  op("&=",         { binary: 10, args: 2, order: "right", isImpure: true })
-  op("^=",         { binary: 10, args: 2, order: "right", isImpure: true })
-  op("|=",         { binary: 10, args: 2, order: "right", isImpure: true })
+  makeOpHelper("*=",         { binary: 10, args: 2, order: "right", isImpure: true })
+  makeOpHelper("/=",         { binary: 10, args: 2, order: "right", isImpure: true })
+  makeOpHelper("%=",         { binary: 10, args: 2, order: "right", isImpure: true })
+  makeOpHelper("<<=",        { binary: 10, args: 2, order: "right", isImpure: true })
+  makeOpHelper(">>=",        { binary: 10, args: 2, order: "right", isImpure: true })
+  makeOpHelper(">>>=",       { binary: 10, args: 2, order: "right", isImpure: true })
+  makeOpHelper("&=",         { binary: 10, args: 2, order: "right", isImpure: true })
+  makeOpHelper("^=",         { binary: 10, args: 2, order: "right", isImpure: true })
+  makeOpHelper("|=",         { binary: 10, args: 2, order: "right", isImpure: true })
 
-  makeAssignOp("++", "+=")
-  makeAssignOp("--", "-=")
+  makeOpAssign("++", "+=")
+  makeOpAssign("--", "-=")
 
-  stmt("debugger", false)
-  stmt("throw", true)
-  stmt("break", true, function (x) {
+  makeOpStatement("debugger", false)
+  makeOpStatement("throw", true)
+  makeOpStatement("break", true, function (x) {
     if (!scope.loop) {
-      throw n.error(x, "must be inside of a loop")
+      throw opt.error(x, "must be inside of a loop")
     }
   })
-  stmt("continue", true, function (x) {
+  makeOpStatement("continue", true, function (x) {
     if (!scope.loop) {
-      throw n.error(x, "must be inside of a loop")
+      throw opt.error(x, "must be inside of a loop")
     }
   })
-  stmt("return", true, function (x) {
+  makeOpStatement("return", true, function (x) {
     if (!scope.function) {
-      throw n.error(x, "must be inside of a function")
+      throw opt.error(x, "must be inside of a function")
     }
   })
 
-  n.makeOp("...", {
+  makeOp("import", {
+    module: function (x, requires, exports) {
+
+    },
+    expression: function (x) {
+      throw opt.error(x, "only allowed with nino.module")
+    }
+  })
+
+  makeOp("export", {
+    module: function (x, requires, exports) {
+
+    },
+    expression: function (x) {
+      throw opt.error(x, "only allowed with nino.module")
+    }
+  })
+
+  makeOp("...", {
     expression: function (x) {
       argumentError(x, 1, 1)
-      throw n.error(x, "invalid use of ...")
+      throw opt.error(x, "invalid use of ...")
     }
   })
 
-  n.makeOp("this", {
+  makeOp("this", {
     expression: function (x) {
       argumentError(x, 0, 0)
       return x
@@ -1885,25 +1885,25 @@ define(["lib/esprima/esprima"], function (esprima) {
     }
   })
 
-  n.makeOp("empty", {
+  makeOp("empty", {
     type: typer([], "void"),
     statement: function (x) {
       argumentError(x, 0, 0)
     },
     expression: function (x) {
       argumentError(x, 0, 0)
-      return n.op("void", n.literal(0))
+      return op("void", literal(0))
     }
   })
 
-  n.makeOp(";", {
+  makeOp(";", {
     // TODO
     type: function (x) {
       if (x.args.length) {
         x = x.args[x.args.length - 1]
-        return n.type("function", [], x.type(x))
+        return type("function", [], x.type(x))
       } else {
-        return n.type("void")
+        return type("void")
       }
     },
     compile: function (x) {
@@ -1911,20 +1911,20 @@ define(["lib/esprima/esprima"], function (esprima) {
       var r   = []
         , len = x.args.length - 1
       x.args.forEach(function (w, i) {
-        var x = n.unwrap(w)
+        var x = unwrap(w)
         r.push(compileFn(x))
         if (i !== len) {
           if (!x.noSemicolon) {
             r.push(";")
           }
-          r.push(n.minify("\n") + n.space())
+          r.push(minify("\n") + space())
         }
       })
       return r.join("")
     }
   })
 
-  n.makeOp(",", {
+  makeOp(",", {
     statement: function (x) {
       argumentError(x, 1)
       x.args.forEach(statement)
@@ -1937,7 +1937,7 @@ define(["lib/esprima/esprima"], function (esprima) {
         var len = x.args.length - 1
           , r   = []
         x.args.forEach(function anon(w, i) {
-          var x = n.unwrap(w)
+          var x = unwrap(w)
           if (x.op === ",") {
             x.args.forEach(anon)
           } else {
@@ -1962,12 +1962,15 @@ define(["lib/esprima/esprima"], function (esprima) {
           } else {
             return compile(x)
           }
-        }).join("," + n.minify(" "))
+        }).join("," + minify(" "))
       })
     }
   })
 
-  n.makeOp(".", {
+  makeOp(".", {
+    destructure: function (x, value) {
+      return [op("=", x, value)]
+    },
     expression: function (x) {
       argumentError(x, 2, 2)
       x.args = x.args.map(expression)
@@ -1978,7 +1981,7 @@ define(["lib/esprima/esprima"], function (esprima) {
         return resetPriority(0, function () { // TODO check this, also tests
           var y
           if ((y = jsProp(x.args[1]))) {
-            x = n.unwrap(x.args[0])
+            x = unwrap(x.args[0])
                                       // TODO not sure how efficient this is...
                                       // TODO does this work correctly for non-number literals?
             if (x.op === "literal" && Math.round(x.args[0]) === x.args[0]) {
@@ -1995,13 +1998,13 @@ define(["lib/esprima/esprima"], function (esprima) {
     }
   })
 
-  n.makeOp("var", {
+  makeOp("var", {
     isImpure: true,
     isStatement: true,
     statement: function (x) {
       argumentError(x, 1)
 
-      var first = n.unwrap(x.args[0])
+      var first = unwrap(x.args[0])
       if (first.op === "=") {
         spliceBlock(first, 1)
       }
@@ -2012,20 +2015,21 @@ define(["lib/esprima/esprima"], function (esprima) {
           return true
         }
       })*/
+
       var r = []
       x.args.forEach(function (w) {
-        var x = n.unwrap(w)
+        var x = unwrap(w)
         if (x.op === "=") {
           //x.args[0] = expression(x.args[0]) // TODO
           //x.args[1] = expression(x.args[1])
-          destructure(r, x.args[0], expression(x.args[1]))
-          //return n.wrap(w, x) // TODO
+          r = r.concat(destructure(x.args[0], expression(x.args[1]), assignToVar))
+          //return wrap(w, x) // TODO
         } else {
-          r.push(n.op("var", expression(w)))
+          r.push(op("var", expression(w)))
         }
       })
-      r.forEach(function (x) {
-        statements.push(assignToVar(x)) // TODO
+      r.forEach(function (w) {
+        statements.push(w) // TODO
       })
       //x.args = r.map(assignToVar)
       //x.args = x.args.map(expression)
@@ -2035,16 +2039,16 @@ define(["lib/esprima/esprima"], function (esprima) {
       var seen = []
 
       x.args.forEach(function (w) {
-        var x = n.unwrap(w)
+        var x = unwrap(w)
         if (x.op === "=") {
           if (isImpure(x.args[1])) {
             seen.push(isImpure)
           }
           x = x.args[0]
         }
-        x = n.unwrap(x)
+        x = unwrap(x)
         seen.push(function (w) {
-          var y = n.unwrap(w)
+          var y = unwrap(w)
           return x.op === y.op && x.args[0] === y.args[0]
         })
       })
@@ -2055,22 +2059,25 @@ define(["lib/esprima/esprima"], function (esprima) {
         })
       })
 
-      var last = n.unwrap(x.args[x.args.length - 1])
+      var last = unwrap(x.args[x.args.length - 1])
       if (last.op === "=") {
-        last = n.unwrap(last.args[0])
+        last = unwrap(last.args[0])
       }
 
+      // TODO really hacky
       while (true) {
         if (last.op === "array") {
-          last = n.unwrap(last.args[last.args.length - 1])
+          last = unwrap(last.args[last.args.length - 1])
           if (last.op === "...") {
-            last = n.unwrap(last.args[0])
+            last = unwrap(last.args[0])
           }
         } else if (last.op === "object") {
-          last = n.unwrap(last.args[last.args.length - 1])
+          last = unwrap(last.args[last.args.length - 1])
           if (last.op === "=") {
-            last = n.unwrap(last.args[1])
+            last = unwrap(last.args[1])
           }
+        } else if (last.op === "=") {
+          last = unwrap(last.args[0])
         } else {
           break
         }
@@ -2086,10 +2093,10 @@ define(["lib/esprima/esprima"], function (esprima) {
         , len  = x.args.length - 1
 
       x.args.forEach(function (w, i) {
-        var x = n.unwrap(w)
+        var x = unwrap(w)
         if (x.op === "=") {
-          if (isImpure(x.args[1]) || seen[n.unwrap(x.args[0]).args[0]]) {
-            seen[n.unwrap(x.args[0]).args[0]] = true
+          if (isImpure(x.args[1]) || seen[unwrap(x.args[0]).args[0]]) {
+            seen[unwrap(x.args[0]).args[0]] = true
             top.push(x.args[0])
             bot.push(w)
           } else {
@@ -2106,18 +2113,18 @@ define(["lib/esprima/esprima"], function (esprima) {
         }
       })
 
-      statement(n.opArray("var", top))
-      return expression(n.opArray(",", bot))*/
+      statement(opArray("var", top))
+      return expression(opArray(",", bot))*/
     },
     compile: function (x) {
       return resetPriority(0, function () { // TODO test this
-        var s = n.minify(x.isInline ? " " : "\n" + n.space() + "    ")
+        var s = minify(x.isInline ? " " : "\n" + space() + "    ")
         return "var " + x.args.map(compile).join("," + s)
       })
     }
   })
 
-  n.makeOp("if", {
+  makeOp("if", {
     statement: function (x) {
       argumentError(x, 1, 3)
       spliceBlock(x, 0)
@@ -2154,20 +2161,20 @@ define(["lib/esprima/esprima"], function (esprima) {
         return expression(x.args[0])
       case 2:
         if (isStatement(x.args[1])) {
-          var u = n.unique()
-          x.args[1] = n.op("=", u, x.args[1])
-          statement(n.op("var", u))
+          var u = unique()
+          x.args[1] = op("=", u, x.args[1])
+          statement(op("var", u))
           statement(x)
           return expression(u)
         } else {
-          return expression(n.op("&&", x.args[0], x.args[1]))
+          return expression(op("&&", x.args[0], x.args[1]))
         }
       case 3:
         if (isStatement(x.args[1]) || isStatement(x.args[2])) {
-          var u = n.unique()
-          x.args[1] = n.op("=", u, x.args[1])
-          x.args[2] = n.op("=", u, x.args[2])
-          statement(n.op("var", u))
+          var u = unique()
+          x.args[1] = op("=", u, x.args[1])
+          x.args[2] = op("=", u, x.args[2])
+          statement(op("var", u))
           statement(x)
           return expression(u)
         } else {
@@ -2182,47 +2189,47 @@ define(["lib/esprima/esprima"], function (esprima) {
     compile: function (x) {
       if (x.isExpression) {
         return withPriority(15, function () {
-          return compileFn(x.args[0]) + n.minify(" ") + "?" + n.minify(" ") +
-                 compile(x.args[1])   + n.minify(" ") + ":" + n.minify(" ") +
+          return compileFn(x.args[0]) + minify(" ") + "?" + minify(" ") +
+                 compile(x.args[1])   + minify(" ") + ":" + minify(" ") +
                  compile(x.args[2])
         })
       } else {
-        x.args[1] = n.unwrap(x.args[1])
+        x.args[1] = unwrap(x.args[1])
         var b = (x.args[1].op === ";")
           , s = []
         if (x.args.length > 2) {
-          x.args[2] = n.unwrap(x.args[2])
+          x.args[2] = unwrap(x.args[2])
           b = b || x.args[2].op === ";"
         }
-        s.push("if", n.minify(" "), "(", compile(x.args[0]), ")", n.minify(" "))
+        s.push("if", minify(" "), "(", compile(x.args[0]), ")", minify(" "))
         if (b) {
           //if (x.args.length === 2) {
           x.noSemicolon = true
           //}
-          s.push("{", n.minify("\n"))
+          s.push("{", minify("\n"))
           s.push(block(x.args[1]))
-          s.push(n.minify("\n"), n.space(), "}")
+          s.push(minify("\n"), space(), "}")
           if (x.args.length > 2) {
-            s.push(n.minify(" "))
+            s.push(minify(" "))
           }
         } else {
-          s.push(n.minify("\n"), block(x.args[1]))
+          s.push(minify("\n"), block(x.args[1]))
           if (x.args.length > 2) {
-            s.push(";", n.minify("\n"))
+            s.push(";", minify("\n"))
           }
         }
         if (x.args.length > 2) {
           if (b) {
             //x.noSemicolon = true
-            s.push("else", n.minify(" "), "{", n.minify("\n"))
+            s.push("else", minify(" "), "{", minify("\n"))
             s.push(block(x.args[2]))
-            s.push(n.minify("\n"), n.space(), "}")
+            s.push(minify("\n"), space(), "}")
           } else {
-            s.push(n.space())
+            s.push(space())
             if (x.args[2].op === "if") {
               s.push("else ", compile(x.args[2]))
             } else {
-              s.push("else", n.minify("\n", " "), block(x.args[2]))
+              s.push("else", minify("\n", " "), block(x.args[2]))
             }
           }
         }
@@ -2231,7 +2238,7 @@ define(["lib/esprima/esprima"], function (esprima) {
     }
   })
 
-  n.makeOp("call", {
+  makeOp("call", {
     isImpure: true,
     statement: function (x) {
       spliceBlock(x, 0)
@@ -2242,8 +2249,8 @@ define(["lib/esprima/esprima"], function (esprima) {
       var first = expression(x.args[0])
       return makeConcat(x.args.slice(1), function (r, seen) {
         if (seen) {
-          x.args = [n.op(".", first, n.literal("apply")),
-                    n.literal(null),
+          x.args = [op(".", first, literal("apply")),
+                    literal(null),
                     r]
         } else {
           x.args = [first].concat(r)
@@ -2256,13 +2263,13 @@ define(["lib/esprima/esprima"], function (esprima) {
         return compileFn(x.args[0]) + "(" +
                // TODO: don't hardcode 6
                resetPriority(6, function () {
-                 return x.args.slice(1).map(compile).join("," + n.minify(" "))
+                 return x.args.slice(1).map(compile).join("," + minify(" "))
                }) + ")"
       })
     }
   })
 
-  n.makeOp("new", {
+  makeOp("new", {
     isImpure: true,
     statement: function (x) {
       spliceBlock(x, 0)
@@ -2278,13 +2285,37 @@ define(["lib/esprima/esprima"], function (esprima) {
         return "new " + compile(x.args[0]) + "(" +
                // TODO: don't hardcode 6
                resetPriority(6, function () {
-                 return x.args.slice(1).map(compile).join("," + n.minify(" "))
+                 return x.args.slice(1).map(compile).join("," + minify(" "))
                }) + ")"
       })
     }
   })
 
-  n.makeOp("array", {
+  makeOp("array", {
+    destructure: function (x, value, f) {
+      return withValue(value, function (value) {
+        var r    = []
+          , i    = 0
+          , iLen = x.args.length
+        while (i < iLen) {
+          (function (w) {
+            var y = unwrap(w)
+            if (y.op === "...") {
+              r = r.concat(destructureSlice(y.args[0], value, i, iLen, f))
+              ++i
+              while (i < iLen) {
+                r = r.concat(destructureLength(x.args[i], value, iLen - i, f))
+                ++i
+              }
+            } else if (y.op !== "empty") {
+              r = r.concat(destructure(w, op(".", value, literal(i)), f))
+            }
+          })(x.args[i])
+          ++i
+        }
+        return r
+      })
+    },
     expression: function (x) {
       argumentError(x, 0)
       return makeConcat(x.args, function (r, seen) {
@@ -2299,16 +2330,28 @@ define(["lib/esprima/esprima"], function (esprima) {
     compile: function (x) {
       // TODO don't hardcode 6
       return resetPriority(6, function () {
-        return "[" + x.args.map(compile).join("," + n.minify(" ")) + "]"
+        return "[" + x.args.map(compile).join("," + minify(" ")) + "]"
       })
     }
   })
 
-  n.makeOp("object", {
+  makeOp("object", {
+    destructure: function (x, value, f) {
+      return withValue(value, function (value) {
+        return x.args.map(function (w) {
+          var x = unwrap(w)
+          if (x.op === "=") {
+            return destructure(x.args[1], op(".", value, propToString(x.args[0])), f)
+          } else {
+            return destructure(x, op(".", value, propToString(x)), f)
+          }
+        })
+      })
+    },
     expression: function (x) {
       argumentError(x, 0)
       x.args = x.args.map(function (x) {
-        if (n.unwrap(x).op === "=") {
+        if (unwrap(x).op === "=") {
           x.args[0] = expression(x.args[0])
           x.args[1] = expression(x.args[1])
           return x
@@ -2324,19 +2367,19 @@ define(["lib/esprima/esprima"], function (esprima) {
         var r = []
         withIndent(indent + 1, function () {
           x.args.forEach(function (w) {
-            var x = n.unwrap(w)
+            var x = unwrap(w)
             if (x.op === "=") {
-              r.push(n.minify("\n") + n.space() +
-                     (jsProp(x.args[0]) || compile(x.args[0])) + ":" + n.minify(" ") +
+              r.push(minify("\n") + space() +
+                     (jsProp(x.args[0]) || compile(x.args[0])) + ":" + minify(" ") +
                      compile(x.args[1]))
             } else {
-              r.push(n.minify("\n") + n.space() +
-                     (jsProp(x) || compile(x)) + ":" + n.minify(" ") + compile(x))
+              r.push(minify("\n") + space() +
+                     (jsProp(x) || compile(x)) + ":" + minify(" ") + compile(x))
             }
           })
         })
         if (r.length) {
-          return "{" + r.join(",") + n.minify("\n") + n.space() + "}"
+          return "{" + r.join(",") + minify("\n") + space() + "}"
         } else {
           return "{}"
         }
@@ -2344,7 +2387,7 @@ define(["lib/esprima/esprima"], function (esprima) {
     }
   })
 
-  n.makeOp("while", {
+  makeOp("while", {
     isImpure: true, // TODO should this be impure?
     isStatement: true,
     statement: function (x) {
@@ -2359,39 +2402,39 @@ define(["lib/esprima/esprima"], function (esprima) {
     expression: function (x) {
       pushExpressions(x, isImpure)
       statement(x)
-      return expression(n.op("void", n.literal(0)))
+      return expression(op("void", literal(0)))
     },
     compile: function (x) {
       return compileLoop(x, "while", compile(x.args[0]), x.args[1])
     }
   })
 
-  n.makeOp("for", {
+  makeOp("for", {
     isImpure: true, // TODO
     isStatement: true,
     statement: function (x) {
       argumentError(x, 0, 4)
       if (x.args.length > 0) {
-        var first = n.unwrap(x.args[0])
+        var first = unwrap(x.args[0])
         if (first.op === "var") {
-          x.args[0] = n.wrap(x.args[0], blockStatement(first))
+          x.args[0] = wrap(x.args[0], blockStatement(first))
         } else if (first.op !== "empty") {
           spliceBlock(x, 0)
           x.args[0] = expression(x.args[0])
         }
       }
       if (x.args.length > 1) {
-        if (n.unwrap(x.args[1]).op !== "empty") {
+        if (unwrap(x.args[1]).op !== "empty") {
           x.args[1] = expression(x.args[1])
         }
       }
       if (x.args.length > 2) {
-        if (n.unwrap(x.args[2]).op !== "empty") {
+        if (unwrap(x.args[2]).op !== "empty") {
           x.args[2] = expression(x.args[2])
         }
       }
       if (x.args.length > 3) {
-        if (n.unwrap(x.args[3]).op !== "empty") {
+        if (unwrap(x.args[3]).op !== "empty") {
           x.args[3] = blockStatement(x.args[3])
         }
       }
@@ -2400,12 +2443,12 @@ define(["lib/esprima/esprima"], function (esprima) {
     expression: function (x) {
       pushExpressions(x, isImpure)
       statement(x)
-      return expression(n.op("void", n.literal(0)))
+      return expression(op("void", literal(0)))
     },
     compile: function (x) {
       var r = []
       if (x.args.length > 0) {
-        var first = n.unwrap(x.args[0])
+        var first = unwrap(x.args[0])
         if (first.op === "var") {
           first.isInline = true
         }
@@ -2414,40 +2457,40 @@ define(["lib/esprima/esprima"], function (esprima) {
         }
       }
       if (x.args.length > 1) {
-        if (n.unwrap(x.args[1]).op !== "empty") {
+        if (unwrap(x.args[1]).op !== "empty") {
           r.push(compile(x.args[1]) + ";")
         }
       }
       if (x.args.length > 2) {
-        if (n.unwrap(x.args[2]).op !== "empty") {
+        if (unwrap(x.args[2]).op !== "empty") {
           r.push(compile(x.args[2]) + ";")
         }
       }
       while (r.length < 3) {
         r.push(";")
       }
-      return compileLoop(x, "for", r.join(n.minify(" ")), x.args[3])
+      return compileLoop(x, "for", r.join(minify(" ")), x.args[3])
     }
   })
 
-  n.makeOp("for-in", {
+  makeOp("for-in", {
     isImpure: true, // TODO
     isStatement: true,
     statement: function (x) {
       argumentError(x, 2, 3)
       spliceBlock(x, 0)
-      var first = n.unwrap(x.args[0])
+      var first = unwrap(x.args[0])
       if (first.op !== "var" && !first.isVariable) {
-        throw n.error(x.args[0], "must be a variable or (var ...)")
+        throw opt.error(x.args[0], "must be a variable or (var ...)")
       }
       if (first.op === "var") {
-        if (first.args.length === 1 && n.unwrap(first.args[0]).isVariable) {
-          x.args[0] = n.wrap(x.args[0], blockStatement(first))
+        if (first.args.length === 1 && unwrap(first.args[0]).isVariable) {
+          x.args[0] = wrap(x.args[0], blockStatement(first))
         } else {
-          throw n.error(x.args[0], "invalid assignment")
+          throw opt.error(x.args[0], "invalid assignment")
         }
       } else {
-        x.args[0] = n.wrap(x.args[0], expression(first))
+        x.args[0] = wrap(x.args[0], expression(first))
       }
       spliceBlock(x, 1)
       x.args[1] = expression(x.args[1])
@@ -2459,14 +2502,14 @@ define(["lib/esprima/esprima"], function (esprima) {
     expression: function (x) {
       pushExpressions(x, isImpure)
       statement(x)
-      return expression(n.op("void", n.literal(0)))
+      return expression(op("void", literal(0)))
     },
     compile: function (x) {
       return compileLoop(x, "for", compile(x.args[0]) + " in " + compile(x.args[1]), x.args[2])
     }
   })
 
-  n.makeOp("function", {
+  makeOp("function", {
     isFunction: true,
     expression: function (x) {
       argumentError(x, 1, 2)
@@ -2478,7 +2521,7 @@ define(["lib/esprima/esprima"], function (esprima) {
     }
   })
 
-  n.makeOp("function-var", {
+  makeOp("function-var", {
     noSemicolon: true,
     isFunction: true,
     isImpure: true,
@@ -2499,7 +2542,7 @@ define(["lib/esprima/esprima"], function (esprima) {
     }
   })
 
-  n.makeOp("try", {
+  makeOp("try", {
     noSemicolon: true,
     //isImpure: "children", TODO
     isStatement: true,
@@ -2508,11 +2551,11 @@ define(["lib/esprima/esprima"], function (esprima) {
       var seen = {}
       x.args = x.args.map(function (x, i) {
         if (seen[x.op]) {
-          throw n.error(x, "cannot have two of the same operator in a try block")
+          throw opt.error(x, "cannot have two of the same operator in a try block")
         }
         seen[x.op] = true
         if (x.op === "catch" && seen["finally"]) {
-          throw n.error(x, "catch must be before finally")
+          throw opt.error(x, "catch must be before finally")
         }
         if (i === 0) {
           return blockStatement(x)
@@ -2525,32 +2568,32 @@ define(["lib/esprima/esprima"], function (esprima) {
     expression: function (x) {
       pushExpressions(x, isImpure)
 
-      var u = n.unique()
+      var u = unique()
 
       x.args = x.args.map(function (w, i) {
-        var x = n.unwrap(w)
+        var x = unwrap(w)
         if (i === 0) {
-          return n.wrap(w, n.op("=", u, x))
+          return wrap(w, op("=", u, x))
         } else if (x.op === "catch") {
-          x.args[1] = n.op("=", u, x.args[1])
+          x.args[1] = op("=", u, x.args[1])
           return w
         } else if (x.op === "finally") {
           return w
         }
       })
-      statement(n.op("var", u))
+      statement(op("var", u))
       statement(x)
 
       return expression(u)
     },
     compile: function (x) {
       return compileBlock("try", "", x.args[0]) + x.args.slice(1).map(function (x) {
-               return n.minify(" ") + compile(x)
+               return minify(" ") + compile(x)
              }).join("")
     }
   })
 
-  n.makeOp("catch", {
+  makeOp("catch", {
     noSemicolon: true,
     expression: function (x) {
       argumentError(x, 1, 2)
@@ -2561,11 +2604,11 @@ define(["lib/esprima/esprima"], function (esprima) {
       return x
     },
     compile: function (x) {
-      return compileBlock("catch", "(" + compile(x.args[0]) + ")" + n.minify(" "), x.args[1])
+      return compileBlock("catch", "(" + compile(x.args[0]) + ")" + minify(" "), x.args[1])
     }
   })
 
-  n.makeOp("finally", {
+  makeOp("finally", {
     noSemicolon: true,
     expression: function (x) {
       argumentError(x, 0, 1)
@@ -2579,70 +2622,96 @@ define(["lib/esprima/esprima"], function (esprima) {
     }
   })
 
-  /*n.makeOp("switch", {
+  /*makeOp("switch", {
     noSemicolon: true,
     statement: function (x) {
       x.args = x.args.map(expression)
       statements.push(x)
     },
     expression: function (x) {
-      var u = n.unique()
+      var u = unique()
 
       x.args = x.args.map(function (x, i) {
         if (i !== 0) {
           if (x.op === "case") {
-            x.args[1] = n.op("=", u, x.args[1])
+            x.args[1] = op("=", u, x.args[1])
           } else if (x.op === "default") {
-            x.args[0] = n.op("=", u, x.args[0])
+            x.args[0] = op("=", u, x.args[0])
           }
         }
         return expression(x)
       })
-      statement(n.op("var", u))
+      statement(op("var", u))
       statements.push(x)
 
       return expression(u)
     },
     compile: function (x) {
       return withScope("loop", function () {
-        return "switch" + n.minify(" ") + "(" + compile(x.args[0]) + ")" + n.minify(" ") +
-                 "{" + n.minify("\n") + x.args.slice(1).map(compile).join(";" + n.minify("\n")) +
-                 n.minify("\n") + "}"
+        return "switch" + minify(" ") + "(" + compile(x.args[0]) + ")" + minify(" ") +
+                 "{" + minify("\n") + x.args.slice(1).map(compile).join(";" + minify("\n")) +
+                 minify("\n") + "}"
       })
     }
   })
 
-  n.makeOp("case", {
+  makeOp("case", {
     expression: function (x) {
       x.args[0] = expression(x.args[0])
       x.args[1] = blockStatement(x.args[1])
       return x
     },
     compile: function (x) {
-      return "case " + compile(x.args[0]) + ":" + n.minify("\n") + block(x.args[1])
+      return "case " + compile(x.args[0]) + ":" + minify("\n") + block(x.args[1])
     }
   })
 
-  n.makeOp("fallthru", {
+  makeOp("fallthru", {
     expression: function (x) {
       x.args[0] = expression(x.args[0])
       x.args[1] = blockStatement(x.args[1])
       return x
     },
     compile: function (x) {
-      return "case " + compile(x.args[0]) + ":" + n.minify("\n") + block(x.args[1])
+      return "case " + compile(x.args[0]) + ":" + minify("\n") + block(x.args[1])
     }
   })
 
-  n.makeOp("default", {
+  makeOp("default", {
     expression: function (x) {
       x.args[0] = blockStatement(x.args[0])
       return x
     },
     compile: function (x) {
-      return "default:" + n.minify("\n") + block(x.args[0])
+      return "default:" + minify("\n") + block(x.args[0])
     }
   })*/
 
-  return n
+  return {
+    opArray: opArray,
+    op: op,
+    fromJSON: fromJSON,
+    parse: parse,
+
+    bypass: bypass,
+    lineComment: lineComment,
+    blockComment: blockComment,
+    docComment: docComment,
+    variable: variable,
+    unique: unique,
+    literal: literal,
+
+    fromAST: fromAST,
+    toAST: toAST,
+
+    opt: opt,
+    builtins: builtins,
+    print: print,
+
+    expression: expressionTop,
+    statement: statementTop,
+    traverse: traverse,
+    replace: replace,
+    compile: compileTop,
+  }
 })

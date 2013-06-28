@@ -7,7 +7,7 @@ To install
 
 Nino uses AMD ``define`` so you need a script loader like `RequireJS <http://requirejs.org/>`_::
 
-  define(["nino"], function (nino) {
+  define(["nino/nino"], function (nino) {
     ...
   })
 
@@ -26,12 +26,17 @@ In addition, you can use ``nino.fromAST`` and ``nino.toAST`` to convert from/to 
   var code = nino.fromAST({ ... })
   nino.toAST(code)
 
-Now that you have a Nino AST, call ``nino.expression`` or ``nino.statement``::
+Now that you have a Nino AST, call ``nino.expression``, ``nino.statement``, or ``nino.module``::
 
   code = nino.expression(code)
   code = nino.statement(code)
+  code = nino.module(code)
 
-REPLs will generally want to use ``nino.expression`` because they return a value. On the other hand, if you're putting the string into a file which will be loaded later, you should use ``nino.statement``.
+REPLs will generally want to use ``nino.expression`` because they return a value.
+
+If you're compiling to a file, it is **highly** recommended to use ``nino.module`` which will automatically wrap it in AMD ``define``.
+
+If you really don't want to use a module system, you can use ``nino.statement``.
 
 Now, you **must** call ``nino.traverse`` on **all** of the files you want to compile::
 
@@ -54,17 +59,18 @@ Nino also has a small utility to generate an HTML string::
 
 In addition, there are some optional properties::
 
-  nino.minified = false
-  nino.warnings = true
   nino.builtins = { ... }
-  nino.mangle   = function (s) { ... }
-  nino.error    = function (x, s) { ... }
+
+  nino.opt.minified = false
+  nino.opt.warnings = true
+  nino.opt.mangle   = function (s) { ... }
+  nino.opt.error    = function (x, s) { ... }
+
+* ``nino.builtins`` is an object that contains all the builtin JavaScript variables. It can be used as the second argument to ``nino.traverse`` and ``nino.replace``.
 
 * ``nino.minified`` controls whether the output is minified or not.
 
 * ``nino.warnings`` controls whether to display warning messages or not.
-
-* ``nino.builtins`` is an object that contains all the builtin JavaScript variables. It can be used as the second argument to ``nino.traverse`` and ``nino.replace``.
 
 * ``nino.mangle`` controls variable mangling. JavaScript variables can only contain certain characters, so if you have a variable which contains illegal characters, you have to mangle it to make it legal. The default behavior is as follows::
 
@@ -80,29 +86,19 @@ Why use it?
 
 * In addition to a ``variable`` datatype, Nino also has a ``unique`` datatype. The only difference is that a ``unique`` is guaranteed to never collide with any other variable [#uniques]_. If you've used Lisps, a ``unique`` is exactly the same as a gensym.
 
-* Includes a Node.js script that can
+* ECMAScript Harmony `modules <http://wiki.ecmascript.org/doku.php?id=harmony:modules>`_ are partially supported::
 
-* ECMAScript Harmony `modules <http://wiki.ecmascript.org/doku.php?id=harmony:modules>`_ are supported::
+    nino.module(nino.fromJSON([",", ["import", ["object", nino.variable("foo")], "./lib/foo"],
+                                    ["export", ["var", ["=", nino.variable("bar"), ...]]]]))
 
-    nino.fromJSON([",", ["import", ["object", nino.variable("foo")], "./lib/foo"],
-                        ["export", ["var", ["=", nino.variable("bar"), ...]]]])
+    require(["./lib/foo"], function (a) {
+      "use strict"
+      var foo = a.foo
+        , bar = ...
+      return { bar: bar }
+    })
 
-    (function (a, b) {
-      "use strict";
-      if (typeof define === "function" && define.amd) {
-        define(["exports", "./lib/foo"], b)
-      } else if (typeof require !== "undefined" && typeof exports !== "undefined") {
-        b(exports, require("./lib/foo"))
-      } else {
-        if (typeof root.bar === "undefined") {
-          root.bar = {}
-        }
-        factory(root.bar, root.foo)
-      }
-    }(this, function (a, b) {
-      "use strict";
-      a.bar = ...
-    }))
+  As you can see, they are compiled to AMD ``require``, but once ECMAScript Harmony modules are supported natively, Nino can switch to them.
 
 * `Destructuring assignments <http://wiki.ecmascript.org/doku.php?id=harmony:destructuring>`_ are supported::
 

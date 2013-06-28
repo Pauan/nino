@@ -698,18 +698,33 @@
           ["call", 1, 2, ["empty"], 3],
 
           ["function", [",", nino.variable("foo"), nino.variable("bar")],
-            nino.variable("foo")]
+            nino.variable("foo")],
+
+          ["var", ["=", [".", nino.variable("foo"), "bar"], 1]],
+          ["var", ["=", [".", nino.variable("foo"), "bar"], ["array", 1, 2]]],
+
+          ["=", [".", nino.variable("foo"), "bar"], 1],
+
+          ["var", ["=", ["=", nino.variable("a"), 1], 2]],
+          ["var", ["=", ["=", nino.variable("a"), ["array", 1, 2]], ["array", 2, 3]]],
+          ["var", ["=", ["=", ["array", nino.variable("a"), nino.variable("b")], ["array", 1, 2]], nino.variable("c")]],
+
+          ["function", [",", ["=", nino.variable("a"), 2]], 1],
+
+          ["function", [",", [".", nino.variable("a"), "b"]],
+            1],
         ])
 
-        /*;(function () {
+        ;(function () {
           var scope = {}
-            , x = nino.fromJSON([",", 1, 2, 3, ["+", [".", nino.variable("foo"), "bar"], 4]])
-          x = nino.module([nino.variable("foo"), "./lib/test"], nino.variable("exports"), x)
+            , x = nino.fromJSON([",", ["import", ["object", nino.variable("foo")], "./lib/foo"],
+                                      ["export", ["var", ["=", nino.variable("bar"), 1]]]])
+          x = nino.module(x)
           x = nino.traverse(x, scope)
           x = nino.replace(x, scope)
           x = nino.compile(x)
           console.log(x)
-        })()*/
+        })()
 
         parse([
           "var a = 5",
